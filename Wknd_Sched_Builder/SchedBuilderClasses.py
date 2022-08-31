@@ -7,7 +7,7 @@ class Slot():
         self.seqID=seqID
         #self.datetime=   #Determined based on seq. Used in printout of assignments
         self.assignee=None #To store eeid of assignee for printout\
-        self.cntVlntr=0 #This will be used to track which slot is the most constrained...it tracks the count of how many people are still available who would willingly be assigned to this slot.
+        self.eligVol=0 #This will be used to track which slot is the most constrained...it tracks the count of how many people eligible volunteers this slot has going for it
 
 class ee():
     """A staff persons data as related to weekend scheduling"""

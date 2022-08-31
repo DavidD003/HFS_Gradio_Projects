@@ -215,13 +215,12 @@ def generateMasterPollTbl(pollDict):
             slotwise_polling=list(rec[:4])
             for i in range(4,16):
                 if rec[i] not in ('n',None) :
-                    slotwise_polling.extend(['1','1']) #Add two entries because 1 entry in polling sheet applies to two slots
+                    slotwise_polling.extend(['y','y']) #Add two entries because 1 entry in polling sheet applies to two slots
                 else:
-                    slotwise_polling.extend(['0','0'])
+                    slotwise_polling.extend(['n','n'])
             slotwise_polling.append(cmnt)
             mPollTbl.append(slotwise_polling)
-    addTBL('allPollData',flds, mPollTbl,False) 
-    #return flds
+    addTBL('allPollData',flds, mPollTbl,False)
 
 
 
@@ -286,10 +285,7 @@ def sklChk(eeid,dispNm):
     else:
         return True
 
-def preProcessData(FtBook,TempBook,AssnBook,PollBook):
-    """A function to take input data and generate all necessary tables and objects in memory to carry out algorithm. Return Schedule object containing all workSlot objects, and dictioanry fo all employee objects"""
-    ftInfoTbl, ftSkillsMtx, tempInfoTbl, tempSkillsMtx, AssignmentsTbl, slot_Legend, JobTrnCrossRef,pollDict,AllSlots,senList=pullTbls(FtBook,TempBook,AssnBook,PollBook)
-    #Generate Worker Objects, and assign to dictionary keyed by eeID
+def makeEEdict(ftInfoTbl,tempInfoTbl):
     eeDict={}
     for dtaTbl in [ftInfoTbl,tempInfoTbl]:
         for row in dtaTbl:
@@ -297,13 +293,31 @@ def preProcessData(FtBook,TempBook,AssnBook,PollBook):
             eeSkills=[trnToDisp(nm[0]) for nm in eeSkills] #Gather display names for skills trained on
             anEE=ee(row[0],row[1],int(row[2]),row[3],row[4],row[5],row[8],skills=eeSkills) #Pull info from Refusals sheet
             eeDict[anEE.eeID]=anEE
-    #Generate Schedule Slot objects (all unassigned slots for weekend)
+    return eeDict
+
+def makeSlots(eeDict,AllSlots):
     openSlots={} #Open here meaning unassigned.. Will be required when it comes time to force
     for row in AllSlots:
         for i in range(row[0],row[1]+1): #Generate a slot for each index over the range indicated... add 1 because python Range fn not inclusive of end point
             sl=Slot(i, row[2],dispToTrn(row[2]))
+            #Determine how many eligible volunteers for this slot
+            elig=[] #To track how many people trained
+            for rec in viewTBL('allPollData',filterOn=[('slot_'+str(sl.seqID),'y')]): # iterate through results (employee info's) of query on who said yes to working at the time of this slot
+                elig.append(sl.dispNm in eeDict[rec[0]].skills) #Append 'True' to list 'elig' if the ee is trained on the job
+            sl.eligVol=sum(elig) # True values as 1.. sum to see number of eligible volunteers for the slot.
             openSlots[str(sl.seqID)+'_'+str(sl.dispNm)]=sl #Enter it into the dictionary
+    return openSlots
 
+
+def preProcessData(FtBook,TempBook,AssnBook,PollBook):
+    """A function to take input data and generate all necessary tables and objects in memory to carry out algorithm. Return Schedule object containing all workSlot objects, and dictioanry fo all employee objects"""
+    ftInfoTbl, ftSkillsMtx, tempInfoTbl, tempSkillsMtx, AssignmentsTbl, slot_Legend, JobTrnCrossRef,pollDict,AllSlots,senList=pullTbls(FtBook,TempBook,AssnBook,PollBook)
+    #GenerateMasterPollTbl to facilitate making the Slots... require having a table with all employee preferences.
+    generateMasterPollTbl(pollDict)
+    #Generate Worker Objects, and assign to dictionary keyed by eeID (numeric key, not string keys)
+    eeDict=makeEEdict(ftInfoTbl,tempInfoTbl)
+    #Generate Schedule Slot objects (all unassigned slots for weekend)
+    openSlots=makeSlots(eeDict,AllSlots)
     return eeDict,openSlots, AssignmentsTbl,slot_Legend,pollDict,senList
 
 
