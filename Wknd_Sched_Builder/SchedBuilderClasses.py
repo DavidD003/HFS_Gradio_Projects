@@ -45,6 +45,8 @@ class Schedule():
         for myAssn in self.preAssn:
             if myAssn[0]==1: #Only evaluate those with '1' in 'Active' (first) column
                 if myAssn[5]=="" or myAssn[5]==None: #If no job assigned, then this is likely a DNS determination. Assign to all jobs in slot.
+                    myKeys=[]
                     for seqNo in range(myAssn[2],myAssn[3]+1):#Apply to all slots in given range.. +1 due to range fn not being inclusive
-                        myKeys=[k for k in self.preAssn if k[len(str(seqNo))]==str(seqNo)] #Pull dict keys for SLots where it is a slot with matching seqNo, regardless of job name
-                    yield myKeys
+                        plus=[k for k in self.slots.keys() if k[:len(str(seqNo))+1]==str(seqNo)+'_'] #Pull dict keys for SLots where it is a slot with matching seqNo, regardless of job name
+                        myKeys.extend(plus)
+                    return myKeys
