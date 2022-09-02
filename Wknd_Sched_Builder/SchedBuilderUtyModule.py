@@ -4,14 +4,11 @@ import openpyxl as pyxl
 import pandas as pd
 import numpy as np
 import sqlite3
-
-
-
-
+from copy import deepcopy
 
 #custom sqlite functions:
 
-def addTBL(tblName,fields="",data=[],addOn=False):
+def addTBL(tblName,fields="",data=None,addOn=False):
     """Create table if not already existing, optionally with data, optionally clearing out old data if present. Fields as list of strings"""
     conn = sqlite3.connect('test1.db')
     c = conn.cursor()
@@ -24,7 +21,7 @@ def addTBL(tblName,fields="",data=[],addOn=False):
     c.execute('''CREATE TABLE IF NOT EXISTS '''+tblName+listedFields) # Create table.
     if addOn==False: #Delete if not adding
         c.execute('''DELETE FROM '''+tblName)
-    if data!=[]:
+    if (data is not None) and len(data)>0:
         stmnt='INSERT INTO '+tblName+' VALUES ('
         for i in range(len(fields)-1):
             stmnt=stmnt+'?,'#Add '?,' equal to num columns less 1
@@ -317,8 +314,9 @@ def preProcessData(FtBook,TempBook,AssnBook,PollBook):
     #Generate Worker Objects, and assign to dictionary keyed by eeID (numeric key, not string keys)
     eeDict=makeEEdict(ftInfoTbl,tempInfoTbl)
     #Generate Schedule Slot objects (all unassigned slots for weekend)
-    openSlots=makeSlots(eeDict,AllSlots)
-    return eeDict,openSlots, AssignmentsTbl,slot_Legend,pollDict,senList
+    allSlots=makeSlots(eeDict,AllSlots)
+    return Schedule(allSlots,eeDict,AssignmentsTbl,senList,pollDict)
+    #return eeDict,allSlots, AssignmentsTbl,slot_Legend,pollDict,senList
 
 
 #Idea: 
