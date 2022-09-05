@@ -17,7 +17,7 @@ class Slot():
         return str(self.seqID)+'_'+self.dispNm
     
     def assn(self,sch,assnType=None,slAssignee=None,fromList=False):
-        """Assign a slot to someone"""
+        """Assign a slot to someone, and perform associated variable tracking etc."""
         self.assnType=assnType 
         self.assignee=slAssignee #eeid
         if slAssignee is not None:
@@ -25,14 +25,13 @@ class Slot():
         del sch.oslots[self.key()] #Remove this slot from the 'openslots' collection
         logTxt=''
         if fromList==True:
-            logTxt+= 'Per Assignment List: '
+            logTxt+= 'Per Assn List: '
         if assnType=='DNS':
             logTxt+='Removed slot '+self.dispNm+' '+ sch.slLeg[self.seqID-1][2]+' from scheduling'
             if slAssignee is not None: logTxt+= ' for ee '+ str(slAssignee)
         elif assnType=='WWF': logTxt+="WWF Assignment: EE "+ str(slAssignee)+' to ' +self.dispNm+' '+ sch.slLeg[self.seqID-1][2]
         elif assnType=='F': logTxt+="FORCED Assignment: EE "+ str(slAssignee)+' to ' +self.dispNm+' '+ sch.slLeg[self.seqID-1][2]
-        
-
+        elif assnType=='V': logTxt+="Voluntary Assignment: EE "+ str(slAssignee)+' to ' +self.dispNm+' '+ sch.slLeg[self.seqID-1][2]
         sch.assnLog.append(logTxt)
 
 class ee():
@@ -94,4 +93,9 @@ class Schedule():
                 keys=getKeys(myAssn[2],myAssn[3],jb) #pull all the keys for slots this particular assn list item applies to
                 for k in keys:
                     slChLg.append([k,self,assnTp,asgne]) #Add record(s) to the slot change long, one for each record.
-        return slChLg
+        #Now that the slChLg is made, carry out the function that reads it record by record and goes and modifies the slots
+        def evalLogRec(rec):
+            """Carry out the 'assn' method on the associated slot with relevant data from Assn log"""
+            self.slots[rec[0]].assn(rec[1],rec[2],rec[3],fromList=True)
+        for rec in slChLg:
+            evalLogRec(rec)
