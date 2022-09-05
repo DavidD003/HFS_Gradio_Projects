@@ -202,7 +202,8 @@ def imptXlTbl(XlFl,ShtNm,TblNm):
 def generateMasterPollTbl(pollDict):
     """Given a dictionary containing the polling tables for all crews, generates a master tbl in SQLlite for being able to filter on peoples availabilities, with '1' indicating interest, '0' no interest, and slot seq 1 starting at index 4"""
     mPollTbl=[]
-    flds=["eeid",'lastNm','firstNm','ytdRefHrs']
+    #the total list of all fields the table has is programmatically generated on these 3 lines
+    flds=["eeid",'lastNm','firstNm','ytdRefHrs'] 
     flds.extend(['slot_'+str(i) for i in range(1,25)])#Note that there is one field for each slot seqID, 1 through 24, for filtering
     flds.append('Comment')
     for crewKey in pollDict:
