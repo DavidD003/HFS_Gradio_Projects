@@ -316,7 +316,7 @@ def preProcessData(FtBook,TempBook,AssnBook,PollBook):
     eeDict=makeEEdict(ftInfoTbl,tempInfoTbl)
     #Generate Schedule Slot objects (all unassigned slots for weekend)
     allSlots=makeSlots(eeDict,AllSlots)
-    return Schedule(allSlots,eeDict,AssignmentsTbl,senList,pollDict)
+    return Schedule(allSlots,eeDict,AssignmentsTbl,senList,pollDict,slot_Legend)
     #return eeDict,allSlots, AssignmentsTbl,slot_Legend,pollDict,senList
 
 

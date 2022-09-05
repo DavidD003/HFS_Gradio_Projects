@@ -16,13 +16,24 @@ class Slot():
     def key(self):
         return str(self.seqID)+'_'+self.dispNm
     
-    def assn(self,sch,assnType=None,slAssignee=None):
+    def assn(self,sch,assnType=None,slAssignee=None,fromList=False):
         """Assign a slot to someone"""
         self.assnType=assnType 
         self.assignee=slAssignee #eeid
         if slAssignee is not None:
             sch.ee[slAssignee].assignments[self.key()]=self #add this slot to the ee's assigned slot dictionary
         del sch.oslots[self.key()] #Remove this slot from the 'openslots' collection
+        logTxt=''
+        if fromList==True:
+            logTxt+= 'Per Assignment List: '
+        if assnType=='DNS':
+            logTxt+='Removed slot '+self.dispNm+' '+ sch.slLeg[self.seqID-1][2]+' from scheduling'
+            if slAssignee is not None: logTxt+= ' for ee '+ str(slAssignee)
+        elif assnType=='WWF': logTxt+="WWF Assignment: EE "+ str(slAssignee)+' to ' +self.dispNm+' '+ sch.slLeg[self.seqID-1][2]
+        elif assnType=='F': logTxt+="FORCED Assignment: EE "+ str(slAssignee)+' to ' +self.dispNm+' '+ sch.slLeg[self.seqID-1][2]
+        
+
+        sch.assnLog.append(logTxt)
 
 class ee():
     """A staff persons data as related to weekend scheduling"""
@@ -43,13 +54,15 @@ class ee():
 
 
 class Schedule():
-    def __init__(self,slots,ee,preAssn,senList,polling):
+    def __init__(self,slots,ee,preAssn,senList,polling,slLeg):
         self.slots= slots  #A collection of Slot objects that compose this schedule
         self.oslots= deepcopy(slots)
         self.ee=ee #A dictionary containing ee info
         self.preAssn=preAssn #A list of lists containing the predefind assignment info
         self.senList=senList
         self.polling=polling
+        self.assnLog=[] #To be appended when assignments made, for read out with final product
+        self.slLeg=slLeg #Slot Legend. Used for easy refernece of slot times after.
 
     def evalAssnList(self):
         """Enter all predefined assignments into the schedule"""
