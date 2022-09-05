@@ -74,15 +74,11 @@ class Schedule():
         for myAssn in self.preAssn:
             if myAssn[0]==1: #Only evaluate those with '1' in 'Active' (first) column
                 assnTp=myAssn[1]
-                if assnTp=='DNS':#Case of 'Do Not Schedule' modification to a slot
-                    if (myAssn[5]=="" or myAssn[5]==None): jb=None #grab job name
-                    else: jb=myAssn[5]
-                    keys=getKeys(myAssn[2],myAssn[3],jb) #pull all the keys for slots this particular assn list item applies to
-                    for k in keys:
-                        slChLg.append([k,self,'DNS',None]) #Add record(s) to the slot change long, one for each record.
-                elif assnTp=='WWF': #Case of WWF assignment being specified in the assignment log
-                    jb=myAssn[5]
-                    keys=getKeys(myAssn[2],myAssn[3],jb) #pull all the keys for slots this particular assn list item applies to
-                    for k in keys:
-                        slChLg.append([k,self,'WWF',myAssn[4]]) #include eeid in the assigment info...
-                elif
+                if (myAssn[5]=="" or myAssn[5]==None): jb=None #grab job name
+                else: jb=myAssn[5]
+                if (myAssn[4]=="" or myAssn[4]==None): asgne=None #grab assignee
+                else: asgne=myAssn[4]
+                keys=getKeys(myAssn[2],myAssn[3],jb) #pull all the keys for slots this particular assn list item applies to
+                for k in keys:
+                    slChLg.append([k,self,assnTp,asgne]) #Add record(s) to the slot change long, one for each record.
+        return slChLg
