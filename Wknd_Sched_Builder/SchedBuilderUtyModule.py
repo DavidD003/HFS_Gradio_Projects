@@ -10,7 +10,7 @@ from copy import deepcopy
 
 def addTBL(tblName,fields="",data=None,addOn=False):
     """Create table if not already existing, optionally with data, optionally clearing out old data if present. Fields as list of strings"""
-    conn = sqlite3.connect('test1.db')
+    conn = sqlite3.connect('test3.db')
     c = conn.cursor()
     listedFields=''
     if fields=="": #If none given, make alphabetical
@@ -42,7 +42,7 @@ def isNumeric(n):
 
 def viewTBL(tblName,fields=None,sortBy=None,filterOn=None,returnStatement=0):
     """return np array of table with optional select fields, filtered, sorted. Sort syntax=[(field1,asc/desc),(field2,asc/desc)...] Filter syntax=[(field1,value),(field2,value)...]"""
-    conn = sqlite3.connect('test1.db')
+    conn = sqlite3.connect('test3.db')
     c = conn.cursor()
     stmnt='SELECT '
     if fields!=None: 
@@ -317,7 +317,6 @@ def preProcessData(FtBook,TempBook,AssnBook,PollBook):
     #Generate Schedule Slot objects (all unassigned slots for weekend)
     allSlots=makeSlots(eeDict,AllSlots)
     return Schedule(allSlots,eeDict,AssignmentsTbl,senList,pollDict,slot_Legend)
-    #return eeDict,allSlots, AssignmentsTbl,slot_Legend,pollDict,senList
 
 
 #Idea: 

@@ -1,4 +1,5 @@
 from copy import deepcopy
+import openpyxl as pyxl
 
 class Slot():
     """A single 4 hour time slot for a single job, to be filled by 1 person"""
@@ -12,17 +13,22 @@ class Slot():
         self.slotInShift=0 #1 if first slot in someones shift. 2 if second, etc.
         self.totSlotsInShift=0 # 1 if 4 hours shift, 2 if 8 hour shift, 3 if 12 hour shift
         self.eligVol=0 #This will be used to track which slot is the most constrained...it tracks the count of how many people eligible volunteers this slot has going for it
-    
+        self.disallowed=[] #EEID's that were specified as not allowed to be assigned to this slot in the Assn List
+
     def key(self):
         return str(self.seqID)+'_'+self.dispNm
     
     def assn(self,sch,assnType=None,slAssignee=None,fromList=False):
         """Assign a slot to someone, and perform associated variable tracking etc."""
-        self.assnType=assnType 
-        self.assignee=slAssignee #eeid
-        if slAssignee is not None:
-            sch.ee[slAssignee].assignments[self.key()]=self #add this slot to the ee's assigned slot dictionary
-        del sch.oslots[self.key()] #Remove this slot from the 'openslots' collection
+        if (slAssignee is not None) and assnType=='DNS': #Case that this is specifying *not* to assign someone. In every other case it is a matter of actually assigning someone 
+            self.disallowed.append(slAssignee)
+        else:
+            self.assnType=assnType 
+            self.assignee=slAssignee #eeid
+            del sch.oslots[self.key()] #Remove this slot from the 'openslots' collection
+            if slAssignee is not None: #Case of specific assignment. 
+                sch.ee[slAssignee].assignments.append(self.key()) #add this slot to the ee's assigned slot dictionary
+        #Logging for printout after
         logTxt=''
         if fromList==True:
             logTxt+= 'Per Assn List: '
@@ -48,7 +54,7 @@ class ee():
         self.firstNm=First
         self.eeID=id
         self.crew=crew
-        self.assignments={}#To be appended with slots as they are assigned, keyed as they are in the slot dictionary
+        self.assignments=[]#To be appended with slots as they are assigned, keyed as they are in the slot dictionary
         self.skills=skills 
 
 
@@ -62,6 +68,7 @@ class Schedule():
         self.polling=polling
         self.assnLog=[] #To be appended when assignments made, for read out with final product
         self.slLeg=slLeg #Slot Legend. Used for easy refernece of slot times after.
+        self.rev=1
 
     def evalAssnList(self):
         """Enter all predefined assignments into the schedule"""
@@ -99,3 +106,24 @@ class Schedule():
             self.slots[rec[0]].assn(rec[1],rec[2],rec[3],fromList=True)
         for rec in slChLg:
             evalLogRec(rec)
+    def printToExcel(self):
+        """Print all slot assignments to an excel file for human-readable schedule interpretation"""
+        
+        #Initial Setup
+        self.rev+=1
+        wb=pyxl.Workbook()
+        dest_filename = 'Wknd Sched_Rev '+str(self.rev)+'.xlsx'
+        ws = wb.active
+        ws.title = "Full Schedule" #Title worksheet for printout
+        ws['A2']='Manager'
+        shifts=['C','C','A','A','B','B']*4
+        tSlots=['11p - 3a','3a - 7a','7a - 11a', '11a - 3p','3p-7p', '7p-11p']*4
+        for i in range(24):
+            ws.cell(column=1+i,row=3).value=shifts.pop(0)
+            ws.cell(column=1+i,row=4).value=tSlots.pop(0)
+        #The sequence of keys returned from self.slots.keys() is the same as the slots required were defined in "AllSlots"
+        #They should all be in order which would allow for a naive method here but I will generalize it in case someone changes the template
+        #And they are not in order after all.
+        #The method here is to use a dictionary keyed by job name to track which row a job is printed out to,
+        #and to add a job to the dictionary if/when it is encountered for the first time.
+        wb.save(filename = dest_filename)
