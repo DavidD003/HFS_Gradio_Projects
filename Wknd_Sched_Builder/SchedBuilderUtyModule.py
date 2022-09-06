@@ -116,6 +116,7 @@ def getFTinfo(flNm):
     #df_FTinfo.set_axis(['snrty', 'crew', 'eeid','last','first','yrRef','wkOT'], axis='columns', inplace=True)
     return np.array(tab)
 
+
 def FTendCol(ws):
     """Returns column # for last column of skills matrix in excel from FT refusal sheet"""
     for i in range(0,400):
@@ -289,7 +290,8 @@ def makeEEdict(ftInfoTbl,tempInfoTbl):
         for row in dtaTbl:
             eeSkills=viewTBL('sklMtx',['trnNm'],filterOn=[('EEID',row[2])])
             eeSkills=[trnToDisp(nm[0]) for nm in eeSkills] #Gather display names for skills trained on
-            anEE=ee(row[0],row[1],int(row[2]),row[3],row[4],row[5],row[8],skills=eeSkills) #Pull info from Refusals sheet
+            sen=viewTBL('senRef',fields=['sen'],filterOn=[('id',str(row[2]))])[0][0]
+            anEE=ee(sen,row[1],int(row[2]),row[3],row[4],row[5],row[8],skills=eeSkills) #Pull info from Refusals sheet
             eeDict[anEE.eeID]=anEE
     return eeDict
 
