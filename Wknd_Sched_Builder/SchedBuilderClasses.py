@@ -1,5 +1,7 @@
 from copy import deepcopy
 from ctypes import alignment
+from operator import index
+from typing import KeysView
 import openpyxl as pyxl
 
 class Slot():
@@ -27,8 +29,8 @@ class Slot():
             self.assnType=assnType 
             self.assignee=slAssignee #eeid
             del sch.oslots[self.key()] #Remove this slot from the 'openslots' collection
-            if slAssignee is not None: #Case of specific assignment. 
-                sch.ee[slAssignee].assignments.append(self.key()) #add this slot to the ee's assigned slot dictionary
+            if slAssignee is not None: #Case of specific assignment, only not follwoed through when its no ee and DNS
+                sch.ee[slAssignee].assnBookKeeping(self,slAssignee,sch) #add this slot to the ee's assigned slot dictionary & other tasks
         #Logging for printout after
         logTxt=''
         if fromList==True:
@@ -65,6 +67,22 @@ class ee():
         else: #Can make functionality to pass in 'MESR' to display name based on some slot criteria?
             pass
 
+    def assnBookKeeping(self,sl,sch):
+        """Carried out when assigned to slot, adjusts tally of eligible volunteers to other slots accordingly"""
+        self.assignments.append(sl.key())
+        self.wkndHrs+=4
+        #   Return keys for open slots where slot is same time as one just assigned and its for a job the person is trained on
+        kys=[k for k in sch.oslots.keys if (k[len(str(sl.seqID))-1]==str(sl.seqID) and k[len(str(sl.seqID)):] in self.skills)]
+        for k in kys:
+            sch.oslots[k].eligVol-=1
+
+    def slOK(self,sl,poll,tp='vol'):
+        """Returns True if the slot being tested is ok to be assigned, false if not"""
+        #Test all conditions (trained, wk hrs, consec shift, time between shifts, before making a branch to test willingness or not based on assignment type forced/voluntary)
+        if (sl.dispNm in self.skills) and (self.eeID not in sl.disallowed): #the person is trained and hasn't been specified in assignment log *not* to be assigned here
+            if self.wkndHrs+self.wkdyHrs<=60: #total week hours ok!
+                #Test on total shift length and time between shifts!!
+                    if (poll[3+sl.seqID] !="") and (poll[3+sl.seqID] is not None) and (poll[3+sl.seqID]!='n'): #Person is willing!
 
 class Schedule():
     def __init__(self,slots,ee,preAssn,senList,polling,slLeg):
@@ -117,7 +135,57 @@ class Schedule():
     
     def fillOutSched(self):
         """Having made the predetermined assignments, fill in the voids in the schedule"""
+        #Algorithm is basically:
+        #Iterate through unassigned slots in sequence of which is most constrained
+        #Assign staff in order of who gets priority pick at the slot
+        #If no more staff, begin forcing. If no forcing availability, label as such and move on
+        #End when no more unassigned slots left
+        def nextSlot():
+            """Returns the next most constrained unassigned slot"""
+            eligCnts=[len(s.elig) for s in self.oslots]
+            if eligCnts.count(max(eligCnts))>1: #Case that there are slots tied for most constrained
+                slts=[s for s in self.oslots if len(s.elig)==max(eligCnts)] #Retrieve the tied slots
+                totSkills=[sum([len(self.ee[eId].skills) for eId in s.elig ]) for s in slts ] #For each slot, make a list of integers, whee each integer is the number of jobs an ee eligible for that slot is trained on. Sum those lists, and the slot with the highest number is selected, since that is correlated with the eligible assignees for that slot having the most ability to cover other slots.
+                if totSkills.count(max(totSkills))>1: #Case that 2 slots are tied for total # of training records for eligible operators
+                    #Go with the one for which there is an operator with least spots trained... assuming that the operator who is most constrained training wise gets it.. while this is an assumption without great basis, there is at least the point that someone with less training will likely have less refusal hours in the year.. so it may turn to work out ok
+                    trainRecForLeastTrainedEE=[min([len(self.ee[eId].skills) for eId in s.elig ]) for s in slts ] #Same formula as totSkills except min instead of sum
+                    return slts[trainRecForLeastTrainedEE.index(min(trainRecForLeastTrainedEE))] #Here only 1 return statement because if its a tie we'll just take the first one, which the index function here will give.
+                else: return self.oslots[totSkills.index(max(totSkills)) #Case of one slot having more totSkills than another
+            else:
+                return self.oslots[eligCnts.index(max(eligCnts))] #Retrieve most constrained if not tied with any other
+        def pickAssignee(sl,Acrew,Bcrew):
+            """Returns an eeid and the assignment type, either voluntary or forced, or 'N" for None/No staff"""
+            def tblSeq(sl,Acrew,Bcrew):
+                """Returns keys for retrieving poll data tables in sequence of priority assignment. With respect to shift, assignment priority goes in CABCA sequence, first FT then Temps"""
+                if sl.seqID in [1,2,7,8,13,14,19,20]: homeShift='C'
+                elif sl.seqID in [3,4,9,10,15,16,21,22]: homeShift='A'
+                else: homeShift='B'
+                keys=[]
+                seqStr='CABCA'
+                cD={'C':'Rock','A':Acrew,'B':Bcrew} #Crew Dict
+                for eeTp in ['FT','Temp']: #Go through all FT's before temps
+                    for i in range(3):#code below uses variable homeShift in conjunction with stepping through seqStr to pull out crews in order of priority selection of OT
+                        keys.append('tbl_'+cD[seqStr[seqStr.index(homeShift)+i]]+eeTp)
+                return keys
+            #===
+            ks=tblSeq(sl,Acrew,Bcrew)
+            #Relying on the fact that the tables in the excel sheet were already sequenced in order of refusal hours...
+            for k in ks:#Iterate through the tables in provided sequence
+                for rec in self.polling[k]: #Iterate through rows in table
+                    if self.ee[rec[0]].slOK(sl,rec):return rec[0],'V' #Person has been found                                       
+            #This point is reached if no one was found who was trained and interested in the job
+            #In this case someone must be forced...
+            for i in range(len(self.senList)-1,-1,-1): #Work way down seniority list
+                lowManID=senList[i][2]
+                if (sl.dispNm in self.ee[lowManID].skills) and (lowManID not in sl.disallowed): #Trained and not disallowed
+
+
+
+
         
+
+
+
 
     def printToExcel(self):
         """Print all slot assignments to an excel file for human-readable schedule interpretation"""

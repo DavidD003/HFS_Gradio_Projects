@@ -303,8 +303,8 @@ def makeSlots(eeDict,AllSlots):
             #Determine how many eligible volunteers for this slot
             elig=[] #To track how many people trained
             for rec in viewTBL('allPollData',filterOn=[('slot_'+str(sl.seqID),'y')]): # iterate through results (employee info's) of query on who said yes to working at the time of this slot
-                elig.append(sl.dispNm in eeDict[rec[0]].skills) #Append 'True' to list 'elig' if the ee is trained on the job
-            sl.eligVol=sum(elig) # True values as 1.. sum to see number of eligible volunteers for the slot.
+                if sl.dispNm in eeDict[rec[0]].skills: elig.append(rec[0]) #Append EEID to list 'elig' if the ee is trained on the job
+            sl.eligVol=len(elig) # True values as 1.. sum to see number of eligible volunteers for the slot.
             openSlots[str(sl.seqID)+'_'+str(sl.dispNm)]=sl #Enter it into the dictionary
     return openSlots
 
@@ -320,7 +320,3 @@ def preProcessData(FtBook,TempBook,AssnBook,PollBook):
     allSlots=makeSlots(eeDict,AllSlots)
     return Schedule(allSlots,eeDict,AssignmentsTbl,senList,pollDict,slot_Legend)
 
-
-#Idea: 
-#create slots
-#create ee's. In the process, for each indicated willing voluntary
