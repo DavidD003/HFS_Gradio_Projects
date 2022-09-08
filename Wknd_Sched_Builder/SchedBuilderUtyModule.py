@@ -6,18 +6,62 @@ import numpy as np
 import sqlite3
 from copy import deepcopy
 
+
+
+def debug(func):
+    """Print the function signature and return value"""
+    @functools.wraps(func)
+    def wrapper_debug(*args, **kwargs):
+        args_repr = [repr(a) for a in args]                      # 1
+        kwargs_repr = [f"{k}={v!r}" for k, v in kwargs.items()]  # 2
+        signature = ", ".join(args_repr + kwargs_repr)           # 3
+        print(f"Calling {func.__name__}({signature})")
+        value = func(*args, **kwargs)
+        print(f"{func.__name__!r} returned {value!r}")           # 4
+        return value
+    return wrapper_debug
+
+
+#======================
 #custom sqlite functions:
 
-def addTBL(tblName,fields="",data=None,addOn=False):
-    """Create table if not already existing, optionally with data, optionally clearing out old data if present. Fields as list of strings"""
-    conn = sqlite3.connect('test3.db')
+# def addTBL(tblName,fields="",data=None,addOn=False):
+#     """Create table if not already existing, optionally with data, optionally clearing out old data if present. Fields as list of strings"""
+#     conn = sqlite3.connect('test4.db')
+#     c = conn.cursor()
+#     listedFields=''
+#     if fields=="": #If none given, make alphabetical
+#         fields=[chr(65+i) for i in range(len(data[0]))]        
+#     for f in fields:
+#         listedFields=listedFields+', '+ f
+#     listedFields='('+listedFields[2:]+''')''' #Add leading and closing bracket, remove naively added comma+space from leading field
+#     c.execute('''CREATE TABLE IF NOT EXISTS '''+tblName+listedFields) # Create table.
+#     if addOn==False: #Delete if not adding
+#         c.execute('''DELETE FROM '''+tblName)
+#     if (data is not None) and len(data)>0:
+#         stmnt='INSERT INTO '+tblName+' VALUES ('
+#         for i in range(len(fields)-1):
+#             stmnt=stmnt+'?,'#Add '?,' equal to num columns less 1
+#         stmnt=stmnt+'?)' #add closing ?), no final comma
+#         c.executemany(stmnt, data)
+#     conn.commit()
+
+
+def addTBL(tblName,fields="",dTypes=None,data=None,addOn=False):
+    """Create table if not already existing, optionally with data, optionally clearing out old data if present. Fields as list of strings. Datatypes as list of strings, one must be provided for each field. See sqlite3 docs for mroe info"""
+    conn = sqlite3.connect('test4.db')
     c = conn.cursor()
     listedFields=''
     if fields=="": #If none given, make alphabetical
         fields=[chr(65+i) for i in range(len(data[0]))]        
-    for f in fields:
-        listedFields=listedFields+', '+ f
-    listedFields='('+listedFields[2:]+''')''' #Add leading and closing bracket, remove naively added comma,space from leading field
+    if dTypes==None: #Need not specify dtypes
+        for f in fields:
+            listedFields=listedFields+', '+ f
+    else: #define data types at inception of table
+        flds=list(zip(fields,dTypes))
+        for pair in flds:
+            listedFields=listedFields+', '+pair[0]+' '+pair[1] 
+    listedFields='('+listedFields[2:]+''')''' #Add leading and closing bracket, remove naively added comma+space from leading field
     c.execute('''CREATE TABLE IF NOT EXISTS '''+tblName+listedFields) # Create table.
     if addOn==False: #Delete if not adding
         c.execute('''DELETE FROM '''+tblName)
@@ -40,9 +84,11 @@ def isNumeric(n):
         except:
             return False
 
+
+@debug
 def viewTBL(tblName,fields=None,sortBy=None,filterOn=None,returnStatement=0):
     """return np array of table with optional select fields, filtered, sorted. Sort syntax=[(field1,asc/desc),(field2,asc/desc)...] Filter syntax=[(field1,value),(field2,value)...]"""
-    conn = sqlite3.connect('test3.db')
+    conn = sqlite3.connect('test4.db')
     c = conn.cursor()
     stmnt='SELECT '
     if fields!=None: 
@@ -54,8 +100,14 @@ def viewTBL(tblName,fields=None,sortBy=None,filterOn=None,returnStatement=0):
     if filterOn!=None:
         filt='WHERE '
         for f in filterOn:
-            if isNumeric(f[1]): filt=filt+f[0]+' = '+ str(f[1])+' AND '
-            else: filt=filt+str(f[0])+' = "'+ str(f[1])+'" AND '
+            if (tblName in ['FTinfo','TempInfo','senRef']) and f[0] in ['sen','id','ytd','totref','totchrg','wtdOT']:
+                #Special case of filtering for a number stored as a string in sqlite. 
+                # #Unfortunately could *not* manage though I tried to force it to store EEID's and other values
+                # in associated tables with correct data type.. so instead for the lookups to work properly I need this extra branch
+                #to add extra ""parentheses to the actual filter command being given to sqlite
+                filt=filt+f[0]+' = "'+ str(f[1])+'" AND '
+            elif isNumeric(f[1]): filt=filt+f[0]+' = '+ str(f[1])+' AND ' #Case of filtering a number, stored as a number in sqlite
+            else: filt=filt+str(f[0])+' = "'+ str(f[1])+'" AND ' #Case of filtering a string, stored as a string in sqlite
         filt=filt[:-4] #Remove naively added final " and "
         stmnt=stmnt+filt
     if sortBy!=None:
@@ -72,23 +124,37 @@ def viewTBL(tblName,fields=None,sortBy=None,filterOn=None,returnStatement=0):
         return np.array(c.fetchall())
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+#@debug
+# def viewTBL(tblName,fields=None,sortBy=None,filterOn=None,returnStatement=0):
+#     """return np array of table with optional select fields, filtered, sorted. Sort syntax=[(field1,asc/desc),(field2,asc/desc)...] Filter syntax=[(field1,value),(field2,value)...]"""
+#     conn = sqlite3.connect('test4.db')
+#     c = conn.cursor()
+#     stmnt='SELECT '
+#     if fields!=None: 
+#         flds=''
+#         for f in fields:
+#             flds=flds+', '+f
+#         stmnt=stmnt+flds[2:]+ ' FROM ' +tblName+' '
+#     else: stmnt=stmnt+'* FROM '+tblName+' ' #unspecified, select all
+#     if filterOn!=None:
+#         filt='WHERE '
+#         for f in filterOn:
+#             if isNumeric(f[1]): filt=filt+f[0]+' = '+ str(f[1])+' AND '
+#             else: filt=filt+str(f[0])+' = "'+ str(f[1])+'" AND '
+#         filt=filt[:-4] #Remove naively added final " and "
+#         stmnt=stmnt+filt
+#     if sortBy!=None:
+#         srt='ORDER BY '
+#         for s in sortBy:
+#             srt=srt+s[0]+' '+s[1]+', '
+#         srt=srt[:-2]
+#         stmnt=stmnt+srt
+#     stmnt=stmnt+';'
+#     if returnStatement==True: # Add option to print out the sql statement for troubleshooting
+#         return stmnt
+#     else:
+#         c.execute(stmnt)
+#         return np.array(c.fetchall())
 
 
 
@@ -110,6 +176,11 @@ def getFTinfo(flNm):
     ws=myWb['Hourly OT']
     btmRow=FTbtRow(ws)
     tab=[[x.internal_value for x in sublist] for sublist in ws['A5:I'+str(btmRow)]]
+    #for rec in tab: #numeric values getting cast to string on import. cast back
+    #    for i in [0,2]:
+    #        rec[i]=int(rec[i])
+    #    for i in [5,6,7]:
+    #        rec[i]=float(rec[i])
     #Following to turn into dataframe
     #df_FTinfo=pd.DataFrame(tab)
     #df_FTinfo=df_FTinfo[[0,1,2,3,4,5,8]] #Pull out only required columns 
@@ -219,11 +290,7 @@ def generateMasterPollTbl(pollDict):
                     slotwise_polling.extend(['n','n'])
             slotwise_polling.append(cmnt)
             mPollTbl.append(slotwise_polling)
-    addTBL('allPollData',flds, mPollTbl,False)
-
-
-
-
+    addTBL('allPollData',fields=flds, data=mPollTbl,addOn=False)
 
 
 def pullTbls(FtBook,TempBook,AssnBook,PollBook):  #Need to make volunteer shift data puller
@@ -248,8 +315,8 @@ def pullTbls(FtBook,TempBook,AssnBook,PollBook):  #Need to make volunteer shift 
     addTBL("sklMtx",fields=["EEID","trnNm"],data=b,addOn=False) #Overwrite all training data and populate FT ops, then append temps for a master table
     addTBL("sklMtx",fields=["EEID","trnNm"],data=d,addOn=True)
     addTBL("xRef",fields=["dispNm","trnNm"],data=g,addOn=False) #Skill name cross ref table for fcn dispToTrn to work
-    addTBL("FTinfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],data=a,addOn=False)
-    addTBL("TempInfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],data=c,addOn=False)
+    addTBL("FTinfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],dTypes=['NUM','TEXT','NUM','TEXT','TEXT','NUM','NUM','NUM'],data=a,addOn=False)
+    addTBL("TempInfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],dTypes=['INTEGER','TEXT','INTEGER','TEXT','TEXT','INTEGER','INTEGER','INTEGER'],data=c,addOn=False)
     #Generate a master seniority table.. following replaces hire date with integers for temps
     senHiLoTemps=viewTBL('TempInfo',sortBy=[('sen','ASC')]) #First retrieve list of temps, most senior to least
     i=100000 #Start new seniority number at arbitrarily high value not to interfere with full timer
@@ -304,12 +371,12 @@ def makeSlots(eeDict,AllSlots):
             elig=[] #To track how many people trained
             for rec in viewTBL('allPollData',filterOn=[('slot_'+str(sl.seqID),'y')]): # iterate through results (employee info's) of query on who said yes to working at the time of this slot
                 if sl.dispNm in eeDict[rec[0]].skills: elig.append(rec[0]) #Append EEID to list 'elig' if the ee is trained on the job
-            sl.eligVol=len(elig) # True values as 1.. sum to see number of eligible volunteers for the slot.
+            sl.eligVol=elig # True values as 1.. sum to see number of eligible volunteers for the slot.
             openSlots[str(sl.seqID)+'_'+str(sl.dispNm)]=sl #Enter it into the dictionary
     return openSlots
 
 
-def preProcessData(FtBook,TempBook,AssnBook,PollBook):
+def preProcessData(Acrew,FtBook,TempBook,AssnBook,PollBook):
     """A function to take input data and generate all necessary tables and objects in memory to carry out algorithm. Return Schedule object containing all workSlot objects, and dictioanry fo all employee objects"""
     ftInfoTbl, ftSkillsMtx, tempInfoTbl, tempSkillsMtx, AssignmentsTbl, slot_Legend, JobTrnCrossRef,pollDict,AllSlots,senList=pullTbls(FtBook,TempBook,AssnBook,PollBook)
     #GenerateMasterPollTbl to facilitate making the Slots... require having a table with all employee preferences.
@@ -318,5 +385,5 @@ def preProcessData(FtBook,TempBook,AssnBook,PollBook):
     eeDict=makeEEdict(ftInfoTbl,tempInfoTbl)
     #Generate Schedule Slot objects (all unassigned slots for weekend)
     allSlots=makeSlots(eeDict,AllSlots)
-    return Schedule(allSlots,eeDict,AssignmentsTbl,senList,pollDict,slot_Legend)
+    return Schedule(Acrew,allSlots,eeDict,AssignmentsTbl,senList,pollDict,slot_Legend)
 
