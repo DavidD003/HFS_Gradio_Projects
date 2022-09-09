@@ -36,7 +36,7 @@ class Slot():
     def key(self):
         return str(self.seqID)+'_'+self.dispNm
     
-    @debug
+    
     def assn(self,sch,assnType=None,slAssignee=None,fromList=False):
         """Assign a slot to someone, and perform associated variable tracking etc."""
         if (slAssignee is not None) and assnType=='DNS': #Case that this is specifying *not* to assign someone. In every other case it is a matter of actually assigning someone 
@@ -84,7 +84,7 @@ class ee():
         else: #Can make functionality to pass in 'MESR' to display name based on some slot criteria?
             pass
 
-    @debug
+    
     def assnBookKeeping(self,sl,sch):
         """Carried out when assigned to slot, adjusts tally of eligible volunteers to other slots accordingly"""
         self.assignments.append(sl.key())
@@ -94,7 +94,7 @@ class ee():
         for k in kys:
             sch.oslots[k].eligVol.pop(sch.oslots[k].eligVol.index(self.eeID)) #pop the eeId out of eligVol list for relevant slots
 
-    @debug
+    
     def totShiftHrs(self,sl):
         """Given a slot, assuming it is assigned, what is the total shift length of the shift in which that slot is a constituent"""
         sLen=1 #start off shift length at one because the slot being passed in is always minimum
@@ -110,7 +110,7 @@ class ee():
                     sLen+=1
             return sLen*4 #Return num hours
     
-    @debug
+    
     def assnConflict(self,sl):
         """Returns true if someone is already assigned to a slot with same seqID as potential assignment, false if no conflict"""
         assns=[int(k[:k.index('_')]) for k in self.assignments] #Pull out the seqID's form the key strings for each slot an ee is already assigned
@@ -118,7 +118,7 @@ class ee():
         elif sl.seqID not in assns: return False #if no other assns with same seqID.. no conflict
         elif sl.seqID in assns: return True #if other assignment already amde with same seqID... true, conflict present
 
-    @debug
+    
     def gapOK(self,sl,sch,tp='V'):
         """Returns true if the slot, when assigned, doesn't break the rule for minimum gap between shifts. 12 hours for forcing, 8 for vol"""
         assns=[int(k[:k.index('_')]) for k in self.assignments] #Pull out the seqID's form the key strings for each slot an ee is already assigned
@@ -151,7 +151,7 @@ class ee():
         elif okForLastWkShift()==True and okForNextWkShift()==True: return True #Reaching this elif means that the other conditions aren't true, so lastly just have to check the gap with weekday shifts ok
         else: return False #Some condition not met       
 
-    @debug
+    
     def slOK(self,sch,sl,poll=0,tp='V'):
         """Returns True if the slot being tested is ok to be assigned, false if not"""
         #Test all conditions (trained, wk hrs, consec shift, time between shifts, before making a branch to test willingness or not based on assignment type forced/voluntary)
@@ -186,7 +186,7 @@ class Schedule():
         else: self.monOT=True 
         self.rev=0
 
-    @debug
+    
     def evalAssnList(self):
         """Enter all predefined assignments into the schedule"""
         #First, iterate through the assignment list. Each record will generate one or more records for the 'slot change log'
@@ -224,7 +224,7 @@ class Schedule():
         for rec in slChLg:
             evalLogRec(rec)
     
-    @debug
+    
     def fillOutSched(self):
         """Having made the predetermined assignments, fill in the voids in the schedule"""
         #Algorithm is basically:
@@ -234,7 +234,7 @@ class Schedule():
         # 3. Force for slots that had no eligible after giivng the eligble their voluntary choices
         #    If no forcing availability, label as such and move on
         #End when no more unassigned slots left
-        @debug
+        
         def nextSlots(force=0):
             """Returns the next most constrained unassigned slot object. If 'forcing'=True then returns list of slots with 0 eligible assignes, ordered by seqID"""
             if force==0: #Proceed with selecting most constrained slot with >=1 potential assignees
@@ -253,7 +253,7 @@ class Schedule():
                 return sorted([self.oslots[s] for s in self.oslots if len(self.oslots[s].eligVol)==0],key=lambda x: x.seqID)
             elif force==2: #Forcing for teh 2nd time. Return all slots. the 'eligibility tracking' isn't perfect so can't filter by it
                 return self.oslots
-        @debug
+
         def pickAssignee(sl,tp='V'):
             """Returns an eeid and the assignment type, either voluntary or forced, or 'N" for None/No staff, for the passed slot"""
             if tp=='V':

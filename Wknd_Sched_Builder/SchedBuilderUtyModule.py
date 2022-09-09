@@ -27,7 +27,7 @@ def debug(func):
 
 # def addTBL(tblName,fields="",data=None,addOn=False):
 #     """Create table if not already existing, optionally with data, optionally clearing out old data if present. Fields as list of strings"""
-#     conn = sqlite3.connect('test4.db')
+#     conn = sqlite3.connect('test6.db')
 #     c = conn.cursor()
 #     listedFields=''
 #     if fields=="": #If none given, make alphabetical
@@ -49,7 +49,7 @@ def debug(func):
 
 def addTBL(tblName,fields="",dTypes=None,data=None,addOn=False):
     """Create table if not already existing, optionally with data, optionally clearing out old data if present. Fields as list of strings. Datatypes as list of strings, one must be provided for each field. See sqlite3 docs for mroe info"""
-    conn = sqlite3.connect('test4.db')
+    conn = sqlite3.connect('test9.db')
     c = conn.cursor()
     listedFields=''
     if fields=="": #If none given, make alphabetical
@@ -70,7 +70,8 @@ def addTBL(tblName,fields="",dTypes=None,data=None,addOn=False):
         for i in range(len(fields)-1):
             stmnt=stmnt+'?,'#Add '?,' equal to num columns less 1
         stmnt=stmnt+'?)' #add closing ?), no final comma
-        c.executemany(stmnt, data)
+        for subEntry in data:
+            c.execute(stmnt, subEntry)
     conn.commit()
 
 def isNumeric(n):
@@ -85,49 +86,10 @@ def isNumeric(n):
             return False
 
 
-@debug
-def viewTBL(tblName,fields=None,sortBy=None,filterOn=None,returnStatement=0):
-    """return np array of table with optional select fields, filtered, sorted. Sort syntax=[(field1,asc/desc),(field2,asc/desc)...] Filter syntax=[(field1,value),(field2,value)...]"""
-    conn = sqlite3.connect('test4.db')
-    c = conn.cursor()
-    stmnt='SELECT '
-    if fields!=None: 
-        flds=''
-        for f in fields:
-            flds=flds+', '+f
-        stmnt=stmnt+flds[2:]+ ' FROM ' +tblName+' '
-    else: stmnt=stmnt+'* FROM '+tblName+' ' #unspecified, select all
-    if filterOn!=None:
-        filt='WHERE '
-        for f in filterOn:
-            if (tblName in ['FTinfo','TempInfo','senRef']) and f[0] in ['sen','id','ytd','totref','totchrg','wtdOT']:
-                #Special case of filtering for a number stored as a string in sqlite. 
-                # #Unfortunately could *not* manage though I tried to force it to store EEID's and other values
-                # in associated tables with correct data type.. so instead for the lookups to work properly I need this extra branch
-                #to add extra ""parentheses to the actual filter command being given to sqlite
-                filt=filt+f[0]+' = "'+ str(f[1])+'" AND '
-            elif isNumeric(f[1]): filt=filt+f[0]+' = '+ str(f[1])+' AND ' #Case of filtering a number, stored as a number in sqlite
-            else: filt=filt+str(f[0])+' = "'+ str(f[1])+'" AND ' #Case of filtering a string, stored as a string in sqlite
-        filt=filt[:-4] #Remove naively added final " and "
-        stmnt=stmnt+filt
-    if sortBy!=None:
-        srt='ORDER BY '
-        for s in sortBy:
-            srt=srt+s[0]+' '+s[1]+', '
-        srt=srt[:-2]
-        stmnt=stmnt+srt
-    stmnt=stmnt+';'
-    if returnStatement==True: # Add option to print out the sql statement for troubleshooting
-        return stmnt
-    else:
-        c.execute(stmnt)
-        return np.array(c.fetchall())
-
-
-#@debug
+# @debug
 # def viewTBL(tblName,fields=None,sortBy=None,filterOn=None,returnStatement=0):
 #     """return np array of table with optional select fields, filtered, sorted. Sort syntax=[(field1,asc/desc),(field2,asc/desc)...] Filter syntax=[(field1,value),(field2,value)...]"""
-#     conn = sqlite3.connect('test4.db')
+#     conn = sqlite3.connect('test6.db')
 #     c = conn.cursor()
 #     stmnt='SELECT '
 #     if fields!=None: 
@@ -139,8 +101,14 @@ def viewTBL(tblName,fields=None,sortBy=None,filterOn=None,returnStatement=0):
 #     if filterOn!=None:
 #         filt='WHERE '
 #         for f in filterOn:
-#             if isNumeric(f[1]): filt=filt+f[0]+' = '+ str(f[1])+' AND '
-#             else: filt=filt+str(f[0])+' = "'+ str(f[1])+'" AND '
+#             if (tblName in ['FTinfo','TempInfo','senRef']) and f[0] in ['sen','id','ytd','totref','totchrg','wtdOT']:
+#                 #Special case of filtering for a number stored as a string in sqlite. 
+#                 # #Unfortunately could *not* manage though I tried to force it to store EEID's and other values
+#                 # in associated tables with correct data type.. so instead for the lookups to work properly I need this extra branch
+#                 #to add extra ""parentheses to the actual filter command being given to sqlite
+#                 filt=filt+f[0]+' = "'+ str(f[1])+'" AND '
+#             elif isNumeric(f[1]): filt=filt+f[0]+' = '+ str(f[1])+' AND ' #Case of filtering a number, stored as a number in sqlite
+#             else: filt=filt+str(f[0])+' = "'+ str(f[1])+'" AND ' #Case of filtering a string, stored as a string in sqlite
 #         filt=filt[:-4] #Remove naively added final " and "
 #         stmnt=stmnt+filt
 #     if sortBy!=None:
@@ -154,10 +122,70 @@ def viewTBL(tblName,fields=None,sortBy=None,filterOn=None,returnStatement=0):
 #         return stmnt
 #     else:
 #         c.execute(stmnt)
-#         return np.array(c.fetchall())
+#         #Cast outputs to numbers if applicable:
+#         QryRes=c.fetchall()
+#         if fields==None and (tblName in ['FTinfo','TempInfo','senRef']): #Case of no specific fields referenced
+#             otpt=[]#initialize output
+#             for l in QryRes:#Retrieve sublists of output
+#                 l=list(l) #Recast
+#                 if len(str(l[0]))>6:
+#                     pass
+#                 else:
+#                     l[0]=int(l[0])
+#                 l[2]=int(l[2])
+#                 l[5]=float(l[5])
+#                 l[6]=float(l[6])
+#                 l[7]=float(l[7])
+#                 l[8]=float(l[8])
+#                 otpt.append(l)
+#         elif fields!=None and (tblName in ['FTinfo','TempInfo','senRef']): #Case of specific fields to be cast
+#             otpt=[] #init output
+#             for l in QryRes:
+#                 l=list(l) #Recast
+#                 for f in fields:
+#                     if f in ['sen','id']:
+#                         if f=='sen':
+#                             if len(l[fields.index(f)])>6:
+#                                 pass #Do not change data type in this case because going by the length it is a 'datetime' format from TempTable, before being converted to seniority integers
+#                         else: #Case of sen or id that is castable to int
+#                             l[fields.index(f)]=int(l[fields.index(f)])
+#                     elif f in ['ytd','totref','totchrg','wtdOT']:
+#                         l[fields.index(f)]=float(l[fields.index(f)])
+#                 otpt.append(l)
+#         else:
+#             otpt=QryRes #Case of a table being queried that doesn't have type casting issues
+        # return otpt
 
-
-
+def viewTBL(tblName,fields=None,sortBy=None,filterOn=None,returnStatement=0):
+    """return np array of table with optional select fields, filtered, sorted. Sort syntax=[(field1,asc/desc),(field2,asc/desc)...] Filter syntax=[(field1,value),(field2,value)...]"""
+    conn = sqlite3.connect('test9.db')
+    c = conn.cursor()
+    stmnt='SELECT '
+    if fields!=None: 
+        flds=''
+        for f in fields:
+            flds=flds+', '+f
+        stmnt=stmnt+flds[2:]+ ' FROM ' +tblName+' '
+    else: stmnt=stmnt+'* FROM '+tblName+' ' #unspecified, select all
+    if filterOn!=None:
+        filt='WHERE '
+        for f in filterOn:
+            if isNumeric(f[1]): filt=filt+f[0]+' = '+ str(f[1])+' AND '
+            else: filt=filt+str(f[0])+' = "'+ str(f[1])+'" AND '
+        filt=filt[:-4] #Remove naively added final " and "
+        stmnt=stmnt+filt
+    if sortBy!=None:
+        srt='ORDER BY '
+        for s in sortBy:
+            srt=srt+s[0]+' '+s[1]+', '
+        srt=srt[:-2]
+        stmnt=stmnt+srt
+    stmnt=stmnt+';'
+    if returnStatement==True: # Add option to print out the sql statement for troubleshooting
+        return stmnt
+    else:
+        c.execute(stmnt)
+        return [list(x) for x in c.fetchall()] #sqlite3 returns list of tuples.. want sublists for being editable
 
 def FTbtRow(ws):
     """Returns the excel row number for the bottom row with data in FT employee sheet"""
@@ -185,7 +213,7 @@ def getFTinfo(flNm):
     #df_FTinfo=pd.DataFrame(tab)
     #df_FTinfo=df_FTinfo[[0,1,2,3,4,5,8]] #Pull out only required columns 
     #df_FTinfo.set_axis(['snrty', 'crew', 'eeid','last','first','yrRef','wkOT'], axis='columns', inplace=True)
-    return np.array(tab)
+    return tab
 
 
 def FTendCol(ws):
@@ -213,7 +241,7 @@ def getFTskills(flNm):
     #idxs=np.array(skills)[:,0]
     #skills=pd.DataFrame(skills,idxs) #Convert to dataframe
     #skills.set_axis(['eeid','skill'], axis='columns', inplace=True)
-    return np.array(skills)
+    return skills
 
 def TempbtRow(ws):
     """Returns the excel row number for the bottom row with data in Temp employee sheet"""
@@ -235,7 +263,7 @@ def getTempinfo(flNm):
     #df_Tempinfo=pd.DataFrame(tab)
     #df_Tempinfo=df_Tempinfo[[0,1,2,3,4,5,8]] #Pull out only required columns 
     #df_Tempinfo.set_axis(['snrty', 'crew', 'eeid','last','first','yrRef','wkOT'], axis='columns', inplace=True)
-    return np.array(tab)
+    return tab
 
 def TempendCol(ws):
     """Returns column # for last column of skills matrix in excel from FT refusal sheet"""
@@ -262,14 +290,14 @@ def getTempskills(flNm):
     #idxs=np.array(skills)[:,0]
     #skills=pd.DataFrame(skills,idxs) #Convert to dataframe
     #skills.set_axis(['eeid','skill'], axis='columns', inplace=True)
-    return np.array(skills)
+    return skills
 
 def imptXlTbl(XlFl,ShtNm,TblNm):
     myWb=pyxl.load_workbook(XlFl) 
     ws=myWb[ShtNm]
     tab=ws.tables[TblNm] #Pull out table
     tab=[[x.value for x in sublist] for sublist in ws[tab.ref]] #Convert to list of lists (each sublist as row of excel table)
-    return np.array(tab)[1:] #Convert nested lists to array, dropping first row which is table headings
+    return tab[1:] #Convert nested lists to array, dropping first row which is table headings
 
 def generateMasterPollTbl(pollDict):
     """Given a dictionary containing the polling tables for all crews, generates a master tbl in SQLlite for being able to filter on peoples availabilities, with '1' indicating interest, '0' no interest, and slot seq 1 starting at index 4"""
@@ -315,8 +343,10 @@ def pullTbls(FtBook,TempBook,AssnBook,PollBook):  #Need to make volunteer shift 
     addTBL("sklMtx",fields=["EEID","trnNm"],data=b,addOn=False) #Overwrite all training data and populate FT ops, then append temps for a master table
     addTBL("sklMtx",fields=["EEID","trnNm"],data=d,addOn=True)
     addTBL("xRef",fields=["dispNm","trnNm"],data=g,addOn=False) #Skill name cross ref table for fcn dispToTrn to work
-    addTBL("FTinfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],dTypes=['NUM','TEXT','NUM','TEXT','TEXT','NUM','NUM','NUM'],data=a,addOn=False)
-    addTBL("TempInfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],dTypes=['INTEGER','TEXT','INTEGER','TEXT','TEXT','INTEGER','INTEGER','INTEGER'],data=c,addOn=False)
+    addTBL("FTinfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],data=a,addOn=False)
+    addTBL("TempInfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],data=c,addOn=False)
+    # addTBL("FTinfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],dTypes=['NUM','TEXT','NUM','TEXT','TEXT','NUM','NUM','NUM'],data=a,addOn=False)
+    # addTBL("TempInfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],dTypes=['INTEGER','TEXT','INTEGER','TEXT','TEXT','INTEGER','INTEGER','INTEGER'],data=c,addOn=False)
     #Generate a master seniority table.. following replaces hire date with integers for temps
     senHiLoTemps=viewTBL('TempInfo',sortBy=[('sen','ASC')]) #First retrieve list of temps, most senior to least
     i=100000 #Start new seniority number at arbitrarily high value not to interfere with full timer
