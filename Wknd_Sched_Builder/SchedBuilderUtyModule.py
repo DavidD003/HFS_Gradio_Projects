@@ -395,14 +395,15 @@ def makeEEdict(ftInfoTbl,tempInfoTbl):
 def makeSlots(eeDict,AllSlots):
     openSlots={} #Open here meaning unassigned.. Will be required when it comes time to force
     for row in AllSlots:
-        for i in range(row[0],row[1]+1): #Generate a slot for each index over the range indicated... add 1 because python Range fn not inclusive of end point
-            sl=Slot(i, row[2],dispToTrn(row[2]))
-            #Determine how many eligible volunteers for this slot
-            elig=[] #To track how many people trained
-            for rec in viewTBL('allPollData',filterOn=[('slot_'+str(sl.seqID),'y')]): # iterate through results (employee info's) of query on who said yes to working at the time of this slot
-                if sl.dispNm in eeDict[rec[0]].skills: elig.append(rec[0]) #Append EEID to list 'elig' if the ee is trained on the job
-            sl.eligVol=elig # True values as 1.. sum to see number of eligible volunteers for the slot.
-            openSlots[str(sl.seqID)+'_'+str(sl.dispNm)]=sl #Enter it into the dictionary
+        if row[6]==1: #Check that the slot generation record is labelled as 'active'
+            for i in range(row[0],row[1]+1): #Generate a slot for each index over the range indicated... add 1 because python Range fn not inclusive of end point
+                sl=Slot(i, row[2],dispToTrn(row[2]))
+                #Determine how many eligible volunteers for this slot
+                elig=[] #To track how many people trained
+                for rec in viewTBL('allPollData',filterOn=[('slot_'+str(sl.seqID),'y')]): # iterate through results (employee info's) of query on who said yes to working at the time of this slot
+                    if sl.dispNm in eeDict[rec[0]].skills: elig.append(rec[0]) #Append EEID to list 'elig' if the ee is trained on the job
+                sl.eligVol=elig # True values as 1.. sum to see number of eligible volunteers for the slot.
+                openSlots[str(sl.seqID)+'_'+str(sl.dispNm)]=sl #Enter it into the dictionary
     return openSlots
 
 
