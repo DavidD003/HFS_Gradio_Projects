@@ -150,8 +150,10 @@ class ee():
                 return False #Case of A shift worker being forced onto first slot of the weekend
             else: return True
         def okForNextWkShift():
-            if self.crew=='Rock' and sl.seqID+6*(sch.monOT==False)==23:
-                return False #Case of night shift person being assigned 3p-7pafternoon before weekday night shift
+            if self.crew=='Rock' and tp=='V' and sl.seqID+6*(sch.monOT==False)==23:
+                return False #Case of night shift person being assigned 3p-7p afternoon before weekday night shift
+            elif self.crew=='Rock' and tp=='F' and sl.seqID+6*(sch.monOT==False)>21: 
+                return False #Case of night shift forcing.. can't be forced such that <12 hours before next shift
             elif self.crew==sch.Acrew and tp=='F' and sl.seqID+6*(sch.monOT==False)==24:
                 return False #Case of day shift ee (next week) being forced 7p-11p the night before
             else: return True
@@ -278,7 +280,7 @@ class Schedule():
             elif force==1:#Forcing for the first time. Return list of slots to force into in chronological order
                 return sorted([self.slots[s] for s in self.slots if len(self.slots[s].eligVol)==0 and self.slots[s].assnType is None],key=lambda x: x.seqID)
             elif force==2: #Forcing for teh 2nd time. Return all slots. the 'eligibility tracking' isn't perfect so can't filter by it because when people were assigned, would be a pain to make logic to properly remove their 'eligVol' status from the slots which they were no longer eligible for for reasons like max shift length etc. Only removed it for slots happenign at same time
-                return sorted([self.slots[s] for s in self.slots if self.slots[s].assnType is 'nV' or self.slots[s].assnType is None],key=lambda x: x.seqID)
+                return sorted([self.slots[s] for s in self.slots if self.slots[s].assnType is 'nV' or self.slots[s].assnType == None],key=lambda x: x.seqID)
         
         def pickAssignee(sl,tp='V'):
             """Returns an eeid and the assignment type, either voluntary or forced, or 'N" for None/No staff, for the passed slot"""
@@ -315,6 +317,7 @@ class Schedule():
         # 1. Initial Forcing
         sls=nextSlots(force=1)
         self.assnLog.append('Initial Forcing phase... Forcing to slots with no eligible volunteers')
+        # print([s.key() for s in sls])
         for s in sls:
             self.assnLog.append('Looking to Force to '+s.dispNm+' '+ self.slLeg[s.seqID-1][1]+' '+ self.slLeg[s.seqID-1][2])
             eId,tp=pickAssignee(s,tp='F')
