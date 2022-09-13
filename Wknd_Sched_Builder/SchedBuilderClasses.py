@@ -1,6 +1,7 @@
 from copy import deepcopy
 from ctypes import alignment
 from operator import index
+from turtle import numinput
 from typing import KeysView
 import openpyxl as pyxl
 import functools
@@ -106,21 +107,29 @@ class ee():
             sch.slots[k].eligVol.pop(sch.slots[k].eligVol.index(self.eeID)) #pop the eeId out of eligVol list for relevant slots
 
     
-    def totShiftHrs(self,sl):
-        """Given a slot, assuming it is assigned, what is the total shift length of the shift in which that slot is a constituent"""
+    def totShiftHrs(self,sl,toFlw=False):
+        """Given a slot, assuming it is assigned, what is the total shift length of the shift in which that slot is a constituent. If toFlw=True then return # slots to follow present slot in same shift"""
         sLen=1 #start off shift length at one because the slot being passed in is always minimum
         assnSeqIDs=[int(k[:k.index('_')]) for k in self.assignments] #Pull out the seqID's form the key strings for each slot an ee is already assigned
         if len(assnSeqIDs)==0:
-            return 4 #Case that no slots assigned so far, so if sl assigned then its alone
+            if toFlw==False:
+                return 4 #Case that no slots assigned so far, so if sl assigned then its alone
+            else: return 0 #single shift, no following
         else:
-            anch=sl.seqID
-            assnSeqIDs.append(anch)
-            assnSeqIDs.sort() #sorts integers lowest to highest
-            for offset in [-3,-2,-1,1,2,3]:
-                if anch+offset in assnSeqIDs: #Knowing that shifts will never be assigned beyond 3 in a row, need only check 4 in a row in the event this function is being run testing for the 4th being ok. Need to test for 4 in a row to rule it out
-                    sLen+=1
-            return sLen*4 #Return num hours
-    
+            if toFlw==False:
+                anch=sl.seqID
+                assnSeqIDs.append(anch)
+                assnSeqIDs.sort() #sorts integers lowest to highest
+                for offset in [-3,-2,-1,1,2,3]:
+                    if anch+offset in assnSeqIDs: #Knowing that shifts will never be assigned beyond 3 in a row, need only check 4 in a row in the event this function is being run testing for the 4th being ok. Need to test for 4 in a row to rule it out
+                        sLen+=1
+                return sLen*4 #Return num hours
+            else: #Count # of slots that follow this one consecutively
+                i=0 #Count of slots to follow on same shift
+                for offset in [1,2]: #Never more than 3 in a row so need only check the 2 following slot seqID's for assignment
+                    if anch+offset in assnSeqIDs: 
+                        i+=1
+                return i
     
     def assnConflict(self,sl):
         """Returns true if someone is already assigned to a slot with same seqID as potential assignment, false if no conflict"""
@@ -278,7 +287,7 @@ class Schedule():
                 else:
                     return self.slots[kyNonZero[eligCnts.index(min(eligCnts))]] #Retrieve most constrained if not tied with any other.
             elif force==1:#Forcing for the first time. Return list of slots to force into in chronological order
-                return sorted([self.slots[s] for s in self.slots if len(self.slots[s].eligVol)==0 and self.slots[s].assnType is None],key=lambda x: x.seqID)
+                return sorted([self.slots[s] for s in self.slots if len(self.slots[s].eligVol)==0 and self.slots[s].assnType == None],key=lambda x: x.seqID)
             elif force==2: #Forcing for teh 2nd time. Return all slots. the 'eligibility tracking' isn't perfect so can't filter by it because when people were assigned, would be a pain to make logic to properly remove their 'eligVol' status from the slots which they were no longer eligible for for reasons like max shift length etc. Only removed it for slots happenign at same time
                 return sorted([self.slots[s] for s in self.slots if self.slots[s].assnType is 'nV' or self.slots[s].assnType == None],key=lambda x: x.seqID)
         
@@ -348,7 +357,7 @@ class Schedule():
     def printToExcel(self):
         """Print all slot assignments to an excel file for human-readable schedule interpretation"""
         #Define Cell styling function
-        def styleCell(cl,clType,horizMergeLength=0):
+        def styleCell(cl,clType,s=None,horizMergeLength=0):
                 for i in range(horizMergeLength+1):
                     cl=cl.offset(0,i)
                     if clType=='hours':
@@ -412,7 +421,32 @@ class Schedule():
                         right=pyxl.styles.Side(border_style='thin'),
                         top=pyxl.styles.Side(border_style='thin'),
                         bottom=pyxl.styles.Side(border_style='thin'))
-
+                    elif clType=='V': #Note that if slot was forced, it will be purple per above if branch, regardless of shift length
+                        if self.ee[s.assignee].totShiftHrs(s)==4: #Colour 4 hour shifts yellow
+                            cl.font=pyxl.styles.Font(bold=True,size=14)
+                            cl.fill=pyxl.styles.PatternFill(fill_type="solid",start_color='00FFC000',end_color='00FFC000')
+                            cl.alignment=pyxl.styles.Alignment(horizontal='center')
+                            cl.border=pyxl.styles.Border(left=pyxl.styles.Side(border_style='thin'),
+                            right=pyxl.styles.Side(border_style='thin'),
+                            top=pyxl.styles.Side(border_style='thin'),
+                            bottom=pyxl.styles.Side(border_style='thin'))
+                        elif self.ee[s.assignee].totShiftHrs(s)==8: #Leave 8 hrs shift white
+                            cl.font=pyxl.styles.Font(bold=False,size=14)
+                            cl.alignment=pyxl.styles.Alignment(horizontal='center')
+                            cl.fill=pyxl.styles.PatternFill(fill_type="solid",start_color='00FFFFFF',end_color='00FFFFFF')
+                            cl.border=pyxl.styles.Border(left=pyxl.styles.Side(border_style='thin'),
+                            right=pyxl.styles.Side(border_style='thin'),
+                            top=pyxl.styles.Side(border_style='thin'),
+                            bottom=pyxl.styles.Side(border_style='thin'))
+                        elif self.ee[s.assignee].totShiftHrs(s)==12: #Colour 12 hrs shift green
+                            cl.font=pyxl.styles.Font(bold=True,size=14)   
+                            cl.alignment=pyxl.styles.Alignment(horizontal='center')
+                            cl.fill=pyxl.styles.PatternFill(fill_type="solid",start_color='0092D050',end_color='0092D050')
+                            cl.border=pyxl.styles.Border(left=pyxl.styles.Side(border_style='thin'),
+                            right=pyxl.styles.Side(border_style='thin'),
+                            top=pyxl.styles.Side(border_style='thin'),
+                            bottom=pyxl.styles.Side(border_style='thin'))
+                            
         #Initial Setup
         self.rev+=1
         wb=pyxl.Workbook()
@@ -444,11 +478,14 @@ class Schedule():
 
         def styleNfill(cl,s):
             if s.assnType=='DNS': cl.value="N/A"
-            elif s.assignee is not None: cl.value=self.ee[s.assignee].dispNm()
+            elif s.assignee is not None:
+                val=self.ee[s.assignee].dispNm()
+                if s.assnType=='F': val=val+'(F)' #Append force identifier
+                cl.value=val
             else: 
                 s.assnType='N'
                 cl.value='NO STAFF'
-            styleCell(cl,s.assnType)
+            styleCell(cl,s.assnType,s)
 
         #==================
         #Enter shifts
@@ -461,7 +498,7 @@ class Schedule():
         r=5 #Start printing job slot info's at row 5 in excel
         for k in self.slots:
             s=self.slots[k] #Retrieve slot
-            if s.dispNm not in jrD: #Add to dict if not in it
+            if s.dispNm not in jrD: #jobRowDict - Add to dict if first time seeing a job
                 jrD[s.dispNm]=r
                 jbCl=ws.cell(row=r,column=1)
                 jbCl.value=s.dispNm
@@ -469,17 +506,49 @@ class Schedule():
                 r+=1 #increment for next one to be observed
             cl=ws.cell(row=jrD[s.dispNm],column=1+s.seqID)
             styleNfill(cl,s)
-            ws.column_dimensions[chr(65+s.seqID)].width = max(10.33,len(cl.value),ws.column_dimensions[chr(64+s.seqID)].width-5) #Widen column if new value is wider than any previously existing
         #=========================================
-        #Lastly, merge contiguous shifts cells
+        #Go through the schedule to add the (1/3),(1/2),(2/2) etc etc etc slot identifiers for human readibility
+        def ranges(nums):
+            """Returns a list of (open,close) intervals a list spans"""
+            nums = sorted(set(nums))
+            gaps = [[s, e] for s, e in zip(nums, nums[1:]) if s+1 < e]
+            edges = iter(nums[:1] + sum(gaps, []) + nums[-1:])
+            return list(zip(edges, edges))
+        #===================
+        for k in self.slots:
+            s=self.slots[k] #Retrieve slot
+            if s.assignee!=None:
+                ids=sorted([self.slots[k].seqID for k in self.ee[s.assignee].assignments])
+                rn=ranges(ids)#sets of start-end intervals
+                myRn=[x for x in rn if s.seqID>= x[0] and s.seqID<= x[1]][0] #Retrieve start and end sqID for shift containing slot in question
+                mysls=[self.slots[k] for k in self.ee[s.assignee].assignments if self.slots[k].seqID>=min(myRn) and self.slots[k].seqID<=max(myRn)] #Retrieve slots
+                contents= [[s.dispNm,s.assnType] for s in mysls] #pull slots jobs/assn.Type
+                denom=1
+                for i in range(len(contents)-1):
+                    if contents[i]!=contents[i+1]:
+                        denom+=1
+                numrtr=[x.key() for x in sorted(mysls, key=lambda x: x.seqID)].index(s.key())+1 #Check for index of current slot within myRn to see its numerator in sequence
+                x=ws.cell(row=jrD[s.dispNm],column=1+s.seqID).value
+                if denom!=1:
+                    ws.cell(row=jrD[s.dispNm],column=1+s.seqID).value=str(x)+' ('+str(numrtr)+'/'+str(denom)+')'
+        #======================================================
+        #Merge contiguous shifts cells
+        #- Define a custom function to facilitate it
         def numInARow(cl,n=1):
-            """Given a cell, return the number of cells in a row have the same name in them."""
+            """Given a cell, return the number of cells in a row have the same name in them... Forced shifts break the count. Count starts from 1 for a voluntary shift immediately following a forced shift"""
             nextval=cl.offset(0,1).value
             if nextval is None or nextval=='':
                 return n
-            elif nextval==cl.value:
-                n=numInARow(cl.offset(0,1),n+1) #Recursive fn. If next cell matches current, use this function on the next one again
-            return n
+            elif cl.value!='' and cl.value is not None:
+                if '/' in nextval:
+                    nextval=cl.offset(0,1).value[:cl.offset(0,1).value.index('/')-3]
+                curVal=cl.value
+                if '/' in cl.value:
+                    curVal=cl.value[:cl.value.index('/')-3]
+                if nextval==curVal:
+                    return numInARow(cl.offset(0,1),n+1) #Recursive fn. If next cell matches current, use this function on the next one again
+                else: return n
+            else: return n
         #====== Proceed with above function to be used
         nSkip=0 #Initialize for skipping cells in this loop as applicable
         for rw in range(5,r):
@@ -490,4 +559,12 @@ class Schedule():
                     ws.merge_cells(start_row=rw, start_column=i, end_row=rw, end_column=i+inArow-1)
                 elif nSkip>0: 
                     nSkip=nSkip-1 #This facilitates *not* checking cells that have already been merged.. thats because if i,i+1,i+2 merged at i, then when loop increments to i+1, it would give an error when checking on i+2.. need to skip to i+3 after having merged i,+1,+2
+        #======================================
+        #Format column widths
+        #Doesnt appear to be working for some reason :(  
+        for k in self.slots:
+            s=self.slots[k] #Retrieve slot
+            ws.column_dimensions[chr(65+s.seqID)].width = max(10.33,len(cl.value),ws.column_dimensions[chr(64+s.seqID)].width-5) #Widen column if new value is wider than any previously existing
+        #==========================
         wb.save(filename = dest_filename)
+        
