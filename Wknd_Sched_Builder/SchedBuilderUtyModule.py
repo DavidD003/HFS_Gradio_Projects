@@ -5,7 +5,8 @@ import pandas as pd
 import numpy as np
 import sqlite3
 from copy import deepcopy
-
+from functools import reduce
+from operator import concat
 
 
 def debug(func):
@@ -371,7 +372,8 @@ def trnToDisp(trnNm):
     q=viewTBL('xRef',fields=['dispNm','trnNm'],filterOn=[('trnNm',trnNm)])
     if len(q)==0:
         return "Custom func error 'trnToDisp' no entry found in xRef with trnNm="+str(trnNm)
-    return q[0][0]
+    return [e[0] for e in q] #If multiple DispNms for one train name (e.g. L4 Packer -> Packer, Candling)  or Bottle Supply -> etc.
+                            #Then return list of all dispNms
 
 def sklChk(eeid,dispNm):
     """Returns True/False if eeid is trained on job with display name or not. Requires skills matrix named sklMtx in sqlite"""
@@ -386,9 +388,12 @@ def makeEEdict(ftInfoTbl,tempInfoTbl,wkHrs):
     for dtaTbl in [ftInfoTbl,tempInfoTbl]:
         for row in dtaTbl:
             eeSkills=viewTBL('sklMtx',['trnNm'],filterOn=[('EEID',row[2])])
-            eeSkills=[trnToDisp(nm[0]) for nm in eeSkills] #Gather display names for skills trained on
+            eeSkills=[trnToDisp(nm[0]) for nm in eeSkills] #Gather display names for skills trained on, reducing lists within list to spread elements
+            sk=[] #Create empty to accumulate all skills present within sublists of eeSkills
+            for s in eeSkills:
+                sk.extend(s)
             sen=viewTBL('senRef',fields=['sen'],filterOn=[('id',str(row[2]))])[0][0]
-            anEE=ee(sen,row[1],int(row[2]),row[3],row[4],row[5],row[8]+wkHrs,skills=eeSkills) #Pull info from Refusals sheet
+            anEE=ee(sen,row[1],int(row[2]),row[3],row[4],row[5],row[8]+wkHrs,skills=sk) #Pull info from Refusals sheet
             eeDict[anEE.eeID]=anEE
     return eeDict
 
@@ -406,7 +411,6 @@ def makeSlots(eeDict,AllSlots):
                 openSlots[str(sl.seqID)+'_'+str(sl.dispNm)]=sl #Enter it into the dictionary
     return openSlots
 
-
 def preProcessData(Acrew,wkHrs,FtBook,TempBook,AssnBook,PollBook):
     """A function to take input data and generate all necessary tables and objects in memory to carry out algorithm. Return Schedule object containing all workSlot objects, and dictioanry fo all employee objects"""
     ftInfoTbl, ftSkillsMtx, tempInfoTbl, tempSkillsMtx, AssignmentsTbl, slot_Legend, JobTrnCrossRef,pollDict,AllSlots,senList=pullTbls(FtBook,TempBook,AssnBook,PollBook)
@@ -417,4 +421,3 @@ def preProcessData(Acrew,wkHrs,FtBook,TempBook,AssnBook,PollBook):
     #Generate Schedule Slot objects (all unassigned slots for weekend)
     allSlots=makeSlots(eeDict,AllSlots)
     return Schedule(Acrew,allSlots,eeDict,AssignmentsTbl,senList,pollDict,slot_Legend)
-
