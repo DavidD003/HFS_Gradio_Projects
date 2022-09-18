@@ -23,34 +23,10 @@ def debug(func):
     return wrapper_debug
 
 
-#======================
-#custom sqlite functions:
-
-# def addTBL(tblName,fields="",data=None,addOn=False):
-#     """Create table if not already existing, optionally with data, optionally clearing out old data if present. Fields as list of strings"""
-#     conn = sqlite3.connect('test6.db')
-#     c = conn.cursor()
-#     listedFields=''
-#     if fields=="": #If none given, make alphabetical
-#         fields=[chr(65+i) for i in range(len(data[0]))]        
-#     for f in fields:
-#         listedFields=listedFields+', '+ f
-#     listedFields='('+listedFields[2:]+''')''' #Add leading and closing bracket, remove naively added comma+space from leading field
-#     c.execute('''CREATE TABLE IF NOT EXISTS '''+tblName+listedFields) # Create table.
-#     if addOn==False: #Delete if not adding
-#         c.execute('''DELETE FROM '''+tblName)
-#     if (data is not None) and len(data)>0:
-#         stmnt='INSERT INTO '+tblName+' VALUES ('
-#         for i in range(len(fields)-1):
-#             stmnt=stmnt+'?,'#Add '?,' equal to num columns less 1
-#         stmnt=stmnt+'?)' #add closing ?), no final comma
-#         c.executemany(stmnt, data)
-#     conn.commit()
-
 
 def addTBL(tblName,fields="",dTypes=None,data=None,addOn=False):
     """Create table if not already existing, optionally with data, optionally clearing out old data if present. Fields as list of strings. Datatypes as list of strings, one must be provided for each field. See sqlite3 docs for mroe info"""
-    conn = sqlite3.connect('test9.db')
+    conn = sqlite3.connect('test12.db')
     c = conn.cursor()
     listedFields=''
     if fields=="": #If none given, make alphabetical
@@ -87,79 +63,9 @@ def isNumeric(n):
             return False
 
 
-# @debug
-# def viewTBL(tblName,fields=None,sortBy=None,filterOn=None,returnStatement=0):
-#     """return np array of table with optional select fields, filtered, sorted. Sort syntax=[(field1,asc/desc),(field2,asc/desc)...] Filter syntax=[(field1,value),(field2,value)...]"""
-#     conn = sqlite3.connect('test6.db')
-#     c = conn.cursor()
-#     stmnt='SELECT '
-#     if fields!=None: 
-#         flds=''
-#         for f in fields:
-#             flds=flds+', '+f
-#         stmnt=stmnt+flds[2:]+ ' FROM ' +tblName+' '
-#     else: stmnt=stmnt+'* FROM '+tblName+' ' #unspecified, select all
-#     if filterOn!=None:
-#         filt='WHERE '
-#         for f in filterOn:
-#             if (tblName in ['FTinfo','TempInfo','senRef']) and f[0] in ['sen','id','ytd','totref','totchrg','wtdOT']:
-#                 #Special case of filtering for a number stored as a string in sqlite. 
-#                 # #Unfortunately could *not* manage though I tried to force it to store EEID's and other values
-#                 # in associated tables with correct data type.. so instead for the lookups to work properly I need this extra branch
-#                 #to add extra ""parentheses to the actual filter command being given to sqlite
-#                 filt=filt+f[0]+' = "'+ str(f[1])+'" AND '
-#             elif isNumeric(f[1]): filt=filt+f[0]+' = '+ str(f[1])+' AND ' #Case of filtering a number, stored as a number in sqlite
-#             else: filt=filt+str(f[0])+' = "'+ str(f[1])+'" AND ' #Case of filtering a string, stored as a string in sqlite
-#         filt=filt[:-4] #Remove naively added final " and "
-#         stmnt=stmnt+filt
-#     if sortBy!=None:
-#         srt='ORDER BY '
-#         for s in sortBy:
-#             srt=srt+s[0]+' '+s[1]+', '
-#         srt=srt[:-2]
-#         stmnt=stmnt+srt
-#     stmnt=stmnt+';'
-#     if returnStatement==True: # Add option to print out the sql statement for troubleshooting
-#         return stmnt
-#     else:
-#         c.execute(stmnt)
-#         #Cast outputs to numbers if applicable:
-#         QryRes=c.fetchall()
-#         if fields==None and (tblName in ['FTinfo','TempInfo','senRef']): #Case of no specific fields referenced
-#             otpt=[]#initialize output
-#             for l in QryRes:#Retrieve sublists of output
-#                 l=list(l) #Recast
-#                 if len(str(l[0]))>6:
-#                     pass
-#                 else:
-#                     l[0]=int(l[0])
-#                 l[2]=int(l[2])
-#                 l[5]=float(l[5])
-#                 l[6]=float(l[6])
-#                 l[7]=float(l[7])
-#                 l[8]=float(l[8])
-#                 otpt.append(l)
-#         elif fields!=None and (tblName in ['FTinfo','TempInfo','senRef']): #Case of specific fields to be cast
-#             otpt=[] #init output
-#             for l in QryRes:
-#                 l=list(l) #Recast
-#                 for f in fields:
-#                     if f in ['sen','id']:
-#                         if f=='sen':
-#                             if len(l[fields.index(f)])>6:
-#                                 pass #Do not change data type in this case because going by the length it is a 'datetime' format from TempTable, before being converted to seniority integers
-#                         else: #Case of sen or id that is castable to int
-#                             l[fields.index(f)]=int(l[fields.index(f)])
-#                     elif f in ['ytd','totref','totchrg','wtdOT']:
-#                         l[fields.index(f)]=float(l[fields.index(f)])
-#                 otpt.append(l)
-#         else:
-#             otpt=QryRes #Case of a table being queried that doesn't have type casting issues
-        # return otpt
-
 def viewTBL(tblName,fields=None,sortBy=None,filterOn=None,returnStatement=0):
     """return np array of table with optional select fields, filtered, sorted. Sort syntax=[(field1,asc/desc),(field2,asc/desc)...] Filter syntax=[(field1,value),(field2,value)...]"""
-    conn = sqlite3.connect('test9.db')
+    conn = sqlite3.connect('test12.db')
     c = conn.cursor()
     stmnt='SELECT '
     if fields!=None: 
@@ -411,7 +317,7 @@ def makeSlots(eeDict,AllSlots):
                 openSlots[str(sl.seqID)+'_'+str(sl.dispNm)]=sl #Enter it into the dictionary
     return openSlots
 
-def preProcessData(Acrew,wkHrs,FtBook,TempBook,AssnBook,PollBook):
+def preProcessData(Acrew,wkHrs,FtBook,TempBook,AssnBook,PollBook,pNT=False):
     """A function to take input data and generate all necessary tables and objects in memory to carry out algorithm. Return Schedule object containing all workSlot objects, and dictioanry fo all employee objects"""
     ftInfoTbl, ftSkillsMtx, tempInfoTbl, tempSkillsMtx, AssignmentsTbl, slot_Legend, JobTrnCrossRef,pollDict,AllSlots,senList=pullTbls(FtBook,TempBook,AssnBook,PollBook)
     #GenerateMasterPollTbl to facilitate making the Slots... require having a table with all employee preferences.
@@ -420,4 +326,4 @@ def preProcessData(Acrew,wkHrs,FtBook,TempBook,AssnBook,PollBook):
     eeDict=makeEEdict(ftInfoTbl,tempInfoTbl,wkHrs)
     #Generate Schedule Slot objects (all unassigned slots for weekend)
     allSlots=makeSlots(eeDict,AllSlots)
-    return Schedule(Acrew,allSlots,eeDict,AssignmentsTbl,senList,pollDict,slot_Legend)
+    return Schedule(Acrew,allSlots,eeDict,AssignmentsTbl,senList,pollDict,slot_Legend,pNT=pNT)

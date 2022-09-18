@@ -71,6 +71,10 @@ class Slot():
             elif assnType=='N':logTxt+="   No voluntary or forced assignment could be made to "+self.dispNm+' '+ sch.slLeg[self.seqID-1][2]+' ('+sch.slLeg[self.seqID-1][1]+')'
             elif assnType=='nV':logTxt+="   No voluntary assignment could be made to "+self.dispNm+' '+ sch.slLeg[self.seqID-1][2]+' ('+sch.slLeg[self.seqID-1][1]+')'
             sch.assnLog.append(logTxt)
+        if slAssignee!=None and assnType in ['V','F']: #Check if assignment breaks forcing rules
+            if sch.ee[slAssignee].frcOK(sch)!=True: #Case that the assignment broke a forcing rule... that slot needs be earlier priority.
+                return False
+        return True
 
 class ee():
     """A staff persons data as related to weekend scheduling"""
@@ -82,6 +86,7 @@ class ee():
             self.refHrs=float(refHrs)
         self.wkdyHrs=float(wkHrs)
         self.wkndHrs=float(wkndHrs)
+        self.frcHrs=0
         self.lastNm=Last
         self.firstNm=First
         self.eeID=int(id)
@@ -96,14 +101,29 @@ class ee():
         else: #Can make functionality to pass in 'MESR' to display name based on some slot criteria?
             pass
 
+    def frcOK(self,sch):
+        """Returns if the present assignments are permissible with rules around forcing limitations"""
+        #Used after making assignments to check if need make a slot priority or not
+        asn=sorted(self.assignments,key=lambda k:int(k[:k.index('_')])) #Order assignment keys by their slot ID's
+        h=self.wkdyHrs #initialize tally
+        for k in asn: #For each slot, considering the hours worked upon completion of that workslot
+            h+=4
+            if h>48 and sch.slots[k].assnType=='F': return False #Forcing rules broken, if condition is met then forcing past 48 hours in week
+        return True #if the above condition not met.. all good    
+
     def assnBookKeeping(self,sl,sch):
         """Carried out when assigned to slot, adjusts tally of eligible volunteers to other slots accordingly"""
         self.assignments.append(sl.key())
+        if sl.assnType=='F': self.frcHrs+=4 #Track forced hours
         self.wkndHrs+=4
-        #   Return keys for open slots where slot is same time as one just assigned and its for a job the person is trained on
-        kys=[k for k in list(sch.slots.keys()) if (k[len(str(sl.seqID))-1]==str(sl.seqID) and k[len(str(sl.seqID)):] in self.skills)]
+        #   Return keys for slots that the person was counted as an eligible volunteer for
+        kys=[k for k in sch.slots if self.eeID in sch.slots[k].eligVol]
         for k in kys:
-            sch.slots[k].eligVol.pop(sch.slots[k].eligVol.index(self.eeID)) #pop the eeId out of eligVol list for relevant slots
+            if self.slOK(sch,sch.slots[k],pt=False,poll=tls.viewTBL('allPollData',filterOn=[('eeid',self.eeID)])[0]) is not True: sch.slots[k].eligVol.pop(sch.slots[k].eligVol.index(self.eeID)) 
+            #pop the eeId out of eligVol list if the given slot is no longer ok to assign
+        #The slOK function does not capture if making a voluntary assignment earlier in the weekend invaldiates a forced assignment later in the weekend.
+        #That is captured in a separate function
+
     
     def totShiftHrs(self,sl,toFlw=False,styling=False):
         """Given a slot, assuming it is assigned, what is the total shift length of the shift in which that slot is a constituent. If toFlw=True then return # slots to follow present slot in same shift"""
@@ -183,7 +203,7 @@ class ee():
         elif okForLastWkShift()==True and okForNextWkShift()==True: return True #Reaching this elif means that the other conditions aren't true, so lastly just have to check the gap with weekday shifts ok
         else: return False #Some condition not met       
 
-    def slOK(self,sch,sl,poll=0,tp='V'):
+    def slOK(self,sch,sl,poll=0,tp='V',pt=True): #pt is 'print'... 
         """Returns True if the slot being tested is ok to be assigned, false if not"""
         #Test all conditions (trained, wk hrs, consec shift, time between shifts, before making a branch to test willingness or not based on assignment type forced/voluntary)
         if (sl.dispNm in self.skills): #the person is trained and hasn't been specified in assignment log *not* to be assigned here
@@ -196,17 +216,17 @@ class ee():
                                     if (poll[3+sl.seqID] !="") and (poll[3+sl.seqID] is not None) and (poll[3+sl.seqID]!='n'): #Person is willing!
                                         return True
                                     else: 
-                                        if sch.sF==False: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Did not volunteer for this shift')
+                                        if sch.sF==False and pt==True: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Did not volunteer for this shift')
                                         return False
                                 else: 
                                     if self.wkndHrs+self.wkdyHrs<48: return True #Forced
-                                    elif sch.sF==False: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Cannot force past 48 hours worked in week')
-                            elif sch.sF==False: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Insufficient gap time between this shift and another')
-                        elif sch.sF==False: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Total consecutive hours would exceed 12')
-                    elif sch.sF==False: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Is already assigned for slot in same time period')
-                elif sch.sF==False: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Total hours in week exceeds 60')
-            elif sch.sF==False: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Disallowed in Assignment List')
-        elif sch.sF==False and self.pNT==True: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Not Trained')
+                                    elif sch.sF==False and pt==True: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Cannot force past 48 hours worked in week')
+                            elif sch.sF==False and pt==True: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Insufficient gap time between this shift and another')
+                        elif sch.sF==False and pt==True: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Total consecutive hours would exceed 12')
+                    elif sch.sF==False and pt==True: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Is already assigned for slot in same time period')
+                elif sch.sF==False and pt==True: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Total hours in week exceeds 60')
+            elif sch.sF==False and pt==True: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Disallowed in Assignment List')
+        elif sch.sF==False and sch.pNT==True and pt==True: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Not Trained')
         return False
 
 class Schedule():
@@ -272,6 +292,15 @@ class Schedule():
         for rec in slChLg:
             evalLogRec(rec)
     
+    def proofEligVol(self):
+        """This clears the eligVol lists for all slots of the eeID's where the person isn't eligible"""
+        #Necessary because had to make slots before making schedule, so wasn't able to actually test if slOK before assigning ee to slot when initializing everything
+        for k in self.slots:
+            s=self.slots[k]
+            for e in s.eligVol:
+                if self.ee[e].slOK(self,s,poll=tls.viewTBL('allPollData',filterOn=[('eeid',e)])[0]) is not True:
+                    s.eligVol.pop(s.eligVol.index(e))
+
     def nextSlots(self,force=0):
         """Returns the next most constrained unassigned slot object. If 'forcing'=True then returns list of slots with 0 eligible assignes, ordered by seqID"""
         if force==0: #Proceed with selecting most constrained slot with >=1 potential assignees
@@ -286,22 +315,22 @@ class Schedule():
                     #Go with the one for which there is an operator with least spots trained... assuming that the operator who is most constrained training wise gets it.. while this is an assumption without great basis, there is at least the point that someone with less training will likely have less refusal hours in the year.. so it may turn to work out ok
                     trainRecForLeastTrainedEE=[min([len(self.ee[eId].skills) for eId in s.eligVol ]) for s in slts ] #Same formula as totSkills except min instead of sum
                     pickSl=slts[trainRecForLeastTrainedEE.index(min(trainRecForLeastTrainedEE))]
-                    self.assnLog.append('Slot '+pickSl.key()+' with assnType: '+str(pickSl.assnType)+' chosen as most constrained, was tied for totSkills, chose first')
+                    self.assnLog.append('Slot '+pickSl.key()+' (assnType: '+str(pickSl.assnType)+') chosen as most constrained, was tied for totSkills, chose first')
                     return pickSl #Here only 1 return statement because if its a tie we'll just take the first one, which the index function here will give.
                 else: 
                     pickSl=self.slots[ kyNonZero[totSkills.index(max(totSkills))]]
-                    self.assnLog.append(pickSl.key()+' with assnType: '+str(pickSl.assnType)+' chosen as most constrained, had most TotSkills')
+                    self.assnLog.append(pickSl.key()+' (assnType: '+str(pickSl.assnType)+') chosen as most constrained, had most TotSkills')
                     return pickSl #Case of one slot having more totSkills than another. Call slots keys, then index that by the totSKills count tog et the index of the slot we want, and retrieve that from slots, 
             else:
                 pickSl=self.slots[kyNonZero[eligCnts.index(min(eligCnts))]]
-                self.assnLog.append(pickSl.key()+' with assnType: '+str(pickSl.assnType)+' chosen as most constrained, had least ('+str(len(pickSl.eligVol))+') eligible volunteers')
+                self.assnLog.append(pickSl.key()+' (assnType: '+str(pickSl.assnType)+') chosen as most constrained, had least ('+str(len(pickSl.eligVol))+') eligible volunteers')
                 return pickSl #Retrieve most constrained if not tied with any other.
         elif force==1:#Forcing for the first time. Return list of slots to force into in chronological order
             return sorted([self.slots[s] for s in self.slots if len(self.slots[s].eligVol)==0 and self.slots[s].assnType == None],key=lambda x: x.seqID)
         elif force==2: #Forcing for teh 2nd time. Return all slots. the 'eligibility tracking' isn't perfect so can't filter by it because when people were assigned, would be a pain to make logic to properly remove their 'eligVol' status from the slots which they were no longer eligible for for reasons like max shift length etc. Only removed it for slots happenign at same time
-            return sorted([self.slots[s] for s in self.slots if self.slots[s].assnType is 'nV' or self.slots[s].assnType == None],key=lambda x: x.seqID)
+            return sorted([self.slots[s] for s in self.slots if self.slots[s].assnType == 'nV' or self.slots[s].assnType == None],key=lambda x: x.seqID)
 
-    def pickAssignee(self,sl,tp='V'):
+    def pickAssignee(self,sl,tp='V',pt=True):
         """Returns an eeid and the assignment type, either voluntary or forced, or 'N" for None/No staff, for the passed slot"""
         if tp=='V':
             def tblSeq(sl,Acrew,Bcrew):
@@ -322,40 +351,95 @@ class Schedule():
             for k in ks:#Iterate through the tables in provided sequence to pull from crews in sequence of priority pick
                 for rec in self.polling[k]: #Iterate through rows in table to pull eeID's in sequence of hours
                     if rec[0] is not None: #Error proof on having an empty polling table for a particular crew
-                        if self.ee[rec[0]].slOK(self,sl,poll=tls.viewTBL('allPollData',filterOn=[('eeid',rec[0])])[0]):
+                        if self.ee[rec[0]].slOK(self,sl,poll=tls.viewTBL('allPollData',filterOn=[('eeid',rec[0])])[0],pt=pt):
                             return rec[0],'V' #Person has been found 
                         else: pass
             return None,'nV' #No voluntary assignee found                                
         elif tp=='F':
+            if self.pickAssignee(sl,pt=False)[0]!=None: return self.pickAssignee(sl,pt=False) #Check that someone is willing. This branch can be reached in phase 1 forcing when recursing because one force created no takers in previous slot, and now testing to force a slot of different time code. Possible that someone may be willing but shift gap doesnt allow forcing, so need this statement to test on voluntary though command is called from forcing phase
             for i in range(len(self.senList)-1,-1,-1): #Work way down seniority list
                 lowManID=int(self.senList[i][2])
                 if self.ee[lowManID].slOK(self,sl,tp='F'): return lowManID,'F'
             return None,'N' #No one to force
 
-    def fillOutSched_v2(self,WIPschd=None,iter=0):
+    @debug
+    def fillOutSched_v2(self,noVol=None,iter=0):
         """Fills out schedule in a recursive way... see blog... when filling with voluntary folks, if a slot with no takers is encountered and has never been identified as such before, then restart from a fresh sched seed where that slot is forced before any voluntary assignments happen"""
         iter+=1
-        if WIPschd==None:
-            WIPschd=deepcopy(self) #Create a copy to work off of moving forward... this happens the first time around..
+        WIPschd=deepcopy(self) #WIPschd will have assignments made to it. 'Self' is kept with only the AssnList stuff coming into this point so that across multiple iterations where the NoVol list is potentially expanded, it serves as the blank slate 
         if iter==1: #First iteration. Initialize noEligVol list. Do not define it this way in future iterations, because you will lose the slots that were discovered that needed to be added!
-            WIPschd.noVol=[k for k in WIPschd.slots if len(WIPschd.slots[k].eligVol)==0 ]
-        #Initial phase.. Force for all slots with no eligVol
-        #        Slots found to lose all eligVol on prev iterations added to this bunch
+            WIPschd.noVol=[k for k in WIPschd.slots if len(WIPschd.slots[k].eligVol)==0 and WIPschd.slots[k].assnType not in ['DNS','WWF']]
+        else: #2nd and further iterations.. coming here because more slots were found to force and would've passed along in function call... so retrieve them here
+            WIPschd.noVol=noVol 
+        #===Logging for printout
+        WIPschd.assnLog.append('Iteration: '+str(iter)+' ||  Starting Schedule With Identified Priority Slots, Forcing As Necessary:')
+        mynoVol=''
+        for x in sorted(WIPschd.noVol,key=lambda k:int(k[:k.index('_')])): mynoVol+=' '+x
+        WIPschd.assnLog.append('Prelim Priority Assignment Sequence: '+mynoVol)
+        #=====
+        #Initial phase.. Volunteer assignments or force as necessary for priority slots identified via no volunteers, or became no-vol on previous iterations
+        #       Slots found to lose all eligVol on prev iterations added to this bunch
+        #       Also need to check if making a forcing creates the need to make another forcing, and perform recursion in that case as well!
+        #       Because the forcing list has slots which were determined via prior recurses in the scheduling that identified a dead end requiring forcing, can't use the same method for tracking new slots needing forcings as used for voluntary assignments
+        for k in sorted(WIPschd.noVol,key=lambda k: int(k[:k.index('_')])): #Iterate through the keys in chronological order          
+            s=WIPschd.slots[k]
+            WIPschd.assnLog.append('Looking to Force to '+s.dispNm+' '+ WIPschd.slLeg[s.seqID-1][1]+' '+ WIPschd.slLeg[s.seqID-1][2])
+            eId,tp=WIPschd.pickAssignee(s,tp='F')
+            r=s.assn(WIPschd,assnType=tp,slAssignee=eId)
+            if r==False and s.key() not in WIPschd.noVol:
+                WIPschd.noVol.append(s.key())
+                return self.fillOutSched_v2(WIPschd.noVol,iter) #WIPschd,'P-Frce Brk' #<-Alt return for debugging
+            newK=set([k for k in WIPschd.slots if len(WIPschd.slots[k].eligVol)==0 and WIPschd.slots[k].assnType not in ['WWF','F','V','nV','DNS','N']]) #After assignment, see if anything now needing forcing that hasn't been seen before
+            if len(newK-set(WIPschd.noVol))>0: #Case that a forced assignment made someone ineligible for a slot they were marked as a volunteer in
+                pullK=newK-set(WIPschd.noVol) #Get the keys for slots that are now without volunteers(could be more than one so use set subtraction)
+                WIPschd.noVol.extend(pullK)
+                WIPschd.assnLog.append('The last assignment resulted in 1 or more other slots having no more eligible volunteers. Those slots are added to the list of slots to force at the start, and a new schedule will be made with updated list of slots to Force')
+                self.assnLog.extend(WIPschd.assnLog)
+                return self.fillOutSched_v2(WIPschd.noVol,iter) # WIPschd,'P-Bump'  #<-Alt return for debugging
 
-        #Iterate though noVol list of keys to force all those slots
-
-        #Second phase
-        #       Make voluntary assignments
-        #       Before using the normal slot picker, check if any slots with no volunteers after last assignment that aren't already present in noVOl list. (presence in noVol list should also correlate to having 'N' assnType since if they have no assignee after forcing...)
-        #           If so, put that slot in the noVol list and do another iteration
-        #           Track in assignment log as appropriate
-        #       If no slot with 0 volunteers that hasnt been seen before, pick most constrained and assign like usual until all slots are assigned
-
+        #Second phase - Follow most constrained slot to amke assignments
+        #      If a slot gets reduced to no eligible volunteers, track it to the priority list and restart
+        OldToAssn=[k for k in WIPschd.slots if (len(WIPschd.slots[k].eligVol)>0) and WIPschd.slots[k].assnType not in ['WWF','F','V','nV','DNS','N'] ]
+        NumSl=len(OldToAssn)
+        #===========Printouts for Reporting
+        appn='Second Phase Assignments (Sequence by Most Constrained): '+str(NumSl)+' || '
+        for x in OldToAssn: appn+=x+' - '
+        WIPschd.assnLog.append(appn)
+        for i in range(NumSl): #Iterate across all slots identified at the start
+            NewToAssn=[k for k in WIPschd.slots if (len(WIPschd.slots[k].eligVol)>0) and WIPschd.slots[k].assnType not in ['WWF','F','V','nV','DNS','N'] ]
+            #===========Printouts for troubleshooting
+            # appn='Iter: '+str(i)+' | OldToAssn: '
+            # for x in OldToAssn: appn+=x
+            # appn+='  | NewToAssn: '
+            # for x in NewToAssn: appn+=x
+            # WIPschd.assnLog.append(appn)
+            #============
+            slLost=set(OldToAssn)-set(NewToAssn)
+            if len(slLost)<2:
+                #Case that this is iteration one (old-new=0) OR this is the expected most common case of the last assignment having been made means that NewToAssn is only missing that last slot, as compared to the Old. If >=2, this means that the last assignment made has resulted in no eligible volunteers for a slot, so there are 2 or more slots missing from NewToAssn list
+                OldToAssn=NewToAssn #consider the new as old for next iteration
+                curS=WIPschd.nextSlots() #Pick most constrained of all avail slots
+                lastK=curS.key() #In case needed to remove this slot from set of keys to add to WIPschd.noVol in next iter if multiple slots made to require forcing
+                if curS is not None:
+                    WIPschd.assnLog.append('Looking to voluntarily assign to '+curS.dispNm+' '+ WIPschd.slLeg[curS.seqID-1][1]+' '+ WIPschd.slLeg[curS.seqID-1][2])
+                    eId,tp=WIPschd.pickAssignee(curS)
+                    r=WIPschd.slots[curS.key()].assn(WIPschd,assnType=tp,slAssignee=eId) #Note the assign method acts on original, not deepcopy, retrieved via key
+                    if r==False and curS.key() not in WIPschd.noVol:
+                        WIPschd.noVol.append(curS.key())
+                        return self.fillOutSched_v2(WIPschd.noVol,iter) # WIPschd,'V-F Rule'   #<-Alt return for debugging
+                if i==NumSl-1:return WIPschd#,'WIN' #Once all voluntary assignments made, schedule done? May need to force more, or go through force function to designate 'no staff' slots
+            else: #Case that assignment being made resulted in more slots being left with no EligVol.. add those slots to noVol list and re start the function
+                WIPschd.assnLog.append('The last assignment resulted in 1 or more other slots having no more eligible volunteers. Those slots are added to the list of slots to force at the start, and a new schedule will be made with updated list of slots to Force')
+                WIPschd.noVol.extend([k for k in slLost if k!=lastK]) #lastK got assigned, so remove it from slLost to get all slots that are identified as needing to be forced due to person last assigned not being available for other slots...
+                return self.fillOutSched_v2(WIPschd.noVol,iter)# WIPschd,'V-Bump' #<-Alt return for debugging
         #Third phase
-        #       Note sure if needed or not to be honest because logically all force slots should be assigned before any voluntary, without exception, because if a force slot is found the process is restarted....
-        #       But doesn't hurt to do a check looping through a list comprehension of all slots where assnType is nV or None
-
-        #And that should be all!
+        # 3. Final Forced Filling
+        # WIPschd.assnLog.append('Final Forcing Phase... Forcing to slots with no more eligible volunteers after having assigned voluntary OT')
+        # sls=WIPschd.nextSlots(force=2)
+        # for s in sls:
+        #     WIPschd.assnLog.append('Forcing Phase 2 on '+s.dispNm+' '+ WIPschd.slLeg[s.seqID-1][1]+' '+ WIPschd.slLeg[s.seqID-1][2])
+        #     eId,tp=WIPschd.pickAssignee(s,tp='F')
+        #     s.assn(WIPschd,assnType=tp,slAssignee=eId)
 
     def fillOutSched(self):
         """Having made the predetermined assignments, fill in the voids in the schedule"""
@@ -611,6 +695,34 @@ class Schedule():
         for k in self.slots:
             s=self.slots[k] #Retrieve slot
             ws.column_dimensions[chr(65+s.seqID)].width = max(10.33,len(cl.value),ws.column_dimensions[chr(64+s.seqID)].width-5) #Widen column if new value is wider than any previously existing
+        #=============================================
+        #Print all forcings
+        ws3 = wb.create_sheet(title="FORCINGS")
+        ws3.cell(row=1,column=1).value='Employee ID'
+        ws3.cell(row=1,column=2).value='Time slot'
+        c=0
+        for k in [k for k in self.slots if self.slots[k].assnType=='F']:
+            ws3.cell(row=2+c,column=1).value=self.ee[self.slots[k].assignee].dispNm
+            ws3.cell(row=2+c,column=2).value=self.slots[k].dispNm+' '+ self.slLeg[self.slots[k].seqID-1][2]+' ('+self.slLeg[self.slots[k].seqID-1][1]+')'
+            c+=1
+        #=============================================
+        #Print assignments to a separate sheet, sequenced by seniority
+        ws2 = wb.create_sheet(title="Assignments (Sen'ty)")
+        ws2.cell(row=1,column=1).value='Seniority'
+        ws2.cell(row=1,column=2).value='Employee ID'
+        ws2.cell(row=1,column=3).value='Time slots'
+        n=0
+        for i in range(len(self.senList)-1):
+            eId=self.senList[i][2]
+            if len(self.ee[eId].assignments)>0:#If the person has an assignment, print it
+                n+=1
+                ws2.cell(row=n+1,column=2).value=self.senList[i][0]
+                ws2.cell(row=n+1,column=2).value=eId
+                c=0
+                for k in sorted(self.ee[eId].assignments,key=lambda k:int(k[:k.index('_')])):
+                    styleNfill(ws2.cell(row=n+1,column=3+c),self.slots[k])
+                    ws2.cell(row=n+1,column=3+c).value=self.slots[k].dispNm()+' '+ self.slLeg[self.slots[k].seqID-1][2]+' ('+self.slLeg[self.slots[k].seqID-1][1]+')'
+                    c+=1
         #==========================
         wb.save(filename = dest_filename)
         
