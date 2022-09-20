@@ -1,4 +1,3 @@
-from re import I
 from SchedBuilderClasses import *
 import openpyxl as pyxl
 import pandas as pd
@@ -219,7 +218,7 @@ def generateMasterPollTbl(pollDict):
             cmnt=rec[16]#retrieve comment to tag on later
             slotwise_polling=list(rec[:4])
             for i in range(4,16):
-                if rec[i] not in ('n',None) :
+                if rec[i] not in ('n','N',None) :
                     slotwise_polling.extend(['y','y']) #Add two entries because 1 entry in polling sheet applies to two slots
                 else:
                     slotwise_polling.extend(['n','n'])
@@ -288,6 +287,7 @@ def sklChk(eeid,dispNm):
         return False
     else:
         return True
+
 
 def makeEEdict(ftInfoTbl,tempInfoTbl,wkHrs):
     eeDict={}

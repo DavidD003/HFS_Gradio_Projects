@@ -1,8 +1,4 @@
 from copy import deepcopy
-from ctypes import alignment
-from operator import index
-from turtle import numinput
-from typing import KeysView
 import openpyxl as pyxl
 import functools
 import SchedBuilderUtyModule as tls
@@ -702,7 +698,7 @@ class Schedule():
         ws3.cell(row=1,column=2).value='Time slot'
         c=0
         for k in [k for k in self.slots if self.slots[k].assnType=='F']:
-            ws3.cell(row=2+c,column=1).value=self.ee[self.slots[k].assignee].dispNm
+            ws3.cell(row=2+c,column=1).value=self.ee[self.slots[k].assignee].dispNm()
             ws3.cell(row=2+c,column=2).value=self.slots[k].dispNm+' '+ self.slLeg[self.slots[k].seqID-1][2]+' ('+self.slLeg[self.slots[k].seqID-1][1]+')'
             c+=1
         #=============================================
@@ -714,15 +710,16 @@ class Schedule():
         n=0
         for i in range(len(self.senList)-1):
             eId=self.senList[i][2]
-            if len(self.ee[eId].assignments)>0:#If the person has an assignment, print it
+            if len(self.ee[eId].assignments)>0 and self.slots[self.ee[eId].assignments[0]].assnType!='WWF':#If the person has an assignment and isn't WWF, print it
                 n+=1
                 ws2.cell(row=n+1,column=2).value=self.senList[i][0]
                 ws2.cell(row=n+1,column=2).value=eId
                 c=0
                 for k in sorted(self.ee[eId].assignments,key=lambda k:int(k[:k.index('_')])):
                     styleNfill(ws2.cell(row=n+1,column=3+c),self.slots[k])
-                    ws2.cell(row=n+1,column=3+c).value=self.slots[k].dispNm()+' '+ self.slLeg[self.slots[k].seqID-1][2]+' ('+self.slLeg[self.slots[k].seqID-1][1]+')'
+                    ws2.cell(row=n+1,column=3+c).value=self.slots[k].dispNm+' '+ self.slLeg[self.slots[k].seqID-1][2]+' ('+self.slLeg[self.slots[k].seqID-1][1]+')'
                     c+=1
         #==========================
         wb.save(filename = dest_filename)
+        return dest_filename
         
