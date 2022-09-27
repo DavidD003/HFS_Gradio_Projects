@@ -236,7 +236,7 @@ def pullTbls(FtBook,TempBook,AssnBook,PollBook):  #Need to make volunteer shift 
     f=imptXlTbl(AssnBook,'Slot_Legend','Slot_Legend')
     g=imptXlTbl(AssnBook,'Job_Training_Crossref','TrainAssnMtx') #to sqlite
     pollDict={} #Generate empty dictionary to store tables of people voluntary overtime
-    for crew in ['Blue','Bud','Rock','Silver','Gold']:
+    for crew in ['Blue','Bud','Rock']:
         for eeType in ['FT','Temp']:
             keyNm='tbl_'+crew+eeType
             tbl=imptXlTbl(PollBook,'Sheet1',keyNm)
@@ -324,3 +324,41 @@ def preProcessData(Acrew,wkHrs,FtBook,TempBook,AssnBook,PollBook,pNT=False):
     #Generate Schedule Slot objects (all unassigned slots for weekend)
     allSlots=makeSlots(eeDict,AllSlots)
     return Schedule(Acrew,allSlots,eeDict,AssignmentsTbl,senList,pollDict,slot_Legend,pNT=pNT)
+
+def pullSomeTbls(FtBook,TempBook,AssnBook,PollBook):  #Need to make volunteer shift data puller
+    """Take flNm, return ftInfoTbl, ftSkillsMtx, tempInfoTbl, tempSkillsMtx, AssignmentsTbl, slot_Legend, JobTrnCrossRef, pollDict, All_Slots, senList.   Uses functions defined previously to return all required tables at once. Function of functions for final script"""
+    a=getFTinfo(FtBook) #to sqlite
+    b=getFTskills(FtBook) #to sqlite
+    b=[[int(d[0]),d[1]] for d in b] #Cast EEid to numeric value
+    c=getTempinfo(TempBook) #to sqlite
+    d=getTempskills(TempBook) #to sqlite
+    d=[[int(data[0]),data[1]] for data in d] #Cast EEid to numeric value
+    e=imptXlTbl(AssnBook,'Assignment_List','Assn_List')
+    f=imptXlTbl(AssnBook,'Slot_Legend','Slot_Legend')
+    g=imptXlTbl(AssnBook,'Job_Training_Crossref','TrainAssnMtx') #to sqlite
+    pollDict={} #Generate empty dictionary to store tables of people voluntary overtime
+    for crew in ['Blue','Bud','Rock','Silver','Gold']:
+        for eeType in ['FT','Temp']:
+            keyNm='tbl_'+crew+eeType
+            tbl=imptXlTbl(PollBook,'Sheet1',keyNm)
+            pollDict[keyNm]=tbl
+    h=imptXlTbl(AssnBook,'All_Slots','All_Slots')
+    #Generate tables in sqlite
+    addTBL("sklMtx",fields=["EEID","trnNm"],data=b,addOn=False) #Overwrite all training data and populate FT ops, then append temps for a master table
+    addTBL("sklMtx",fields=["EEID","trnNm"],data=d,addOn=True)
+    addTBL("xRef",fields=["dispNm","trnNm"],data=g,addOn=False) #Skill name cross ref table for fcn dispToTrn to work
+    addTBL("FTinfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],data=a,addOn=False)
+    addTBL("TempInfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],data=c,addOn=False)
+    # addTBL("FTinfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],dTypes=['NUM','TEXT','NUM','TEXT','TEXT','NUM','NUM','NUM'],data=a,addOn=False)
+    # addTBL("TempInfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],dTypes=['INTEGER','TEXT','INTEGER','TEXT','TEXT','INTEGER','INTEGER','INTEGER'],data=c,addOn=False)
+    #Generate a master seniority table.. following replaces hire date with integers for temps
+    senHiLoTemps=viewTBL('TempInfo',sortBy=[('sen','ASC')]) #First retrieve list of temps, most senior to least
+    i=100000 #Start new seniority number at arbitrarily high value not to interfere with full timer
+    for row in senHiLoTemps:
+        row[0]=i
+        i+=1
+    #Overwrite/make new master sen ref table. Then append the Temp data with integerized values
+    addTBL("senRef",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],data=a,addOn=False)
+    addTBL("senRef",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],data=senHiLoTemps,addOn=True)
+    senList=viewTBL('senRef',sortBy=[('sen','ASC')])
+    return a,b,c,d,e,f,g,pollDict,h,senList
