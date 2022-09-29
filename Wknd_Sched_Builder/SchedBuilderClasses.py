@@ -36,7 +36,7 @@ class Slot():
         return str(self.seqID)+'_'+self.dispNm
     
     def assn(self,sch,assnType=None,slAssignee=None,fromList=False):
-        """Assign a slot to someone, and perform associated variable tracking etc."""
+        """Assign a slot to someone, and perform associated variable tracking etc. Returns a bool indicating if a forcing rule was broken or not"""
         if (slAssignee is not None) and assnType=='DNS': #Case that this is specifying *not* to assign someone. In every other case it is a matter of actually assigning someone 
             self.disallowed.append(slAssignee)
         else:
@@ -117,7 +117,7 @@ class ee():
             if self.slOK(sch,sch.slots[k],pt=False,poll=tls.viewTBL('allPollData',filterOn=[('eeid',self.eeID)])[0]) is not True: sch.slots[k].eligVol.pop(sch.slots[k].eligVol.index(self.eeID)) 
             #pop the eeId out of eligVol list if the given slot is no longer ok to assign
         #The slOK function does not capture if making a voluntary assignment earlier in the weekend invaldiates a forced assignment later in the weekend.
-        #That is captured in a separate function
+        #That is captured in a separate function 'frcOK'
 
     
     def totShiftHrs(self,sl,toFlw=False,styling=False):
@@ -207,15 +207,17 @@ class ee():
                     if self.assnConflict(sl)==False: #No existing assignment at same time!
                         if self.totShiftHrs(sl)<=12: #This slot wouldn't have a given shift exceed 12 hours
                             if self.gapOK(sl,sch,tp=tp): #This slot being assigned doesn't break a shift gap rule
-                                if tp=='V':#voluntary: check willigness
-                                    if (poll[3+sl.seqID] !="") and (poll[3+sl.seqID] is not None) and (poll[3+sl.seqID]!='n'): #Person is willing!
-                                        return True
+                                if self.crew in ['wwf','bud','blue','rock','silver','gold','student']:
+                                    if tp=='V':#voluntary: check willigness
+                                        if (poll[3+sl.seqID] !="") and (poll[3+sl.seqID] is not None) and (poll[3+sl.seqID]!='n'): #Person is willing!
+                                            return True
+                                        else: 
+                                            if sch.sF==False and pt==True: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Did not volunteer for this shift')
+                                            return False
                                     else: 
-                                        if sch.sF==False and pt==True: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Did not volunteer for this shift')
-                                        return False
-                                else: 
-                                    if self.wkndHrs+self.wkdyHrs<48: return True #Forced
-                                    elif sch.sF==False and pt==True: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Cannot force past 48 hours worked in week')
+                                        if self.wkndHrs+self.wkdyHrs<48: return True #Forced
+                                        elif sch.sF==False and pt==True: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Cannot force past 48 hours worked in week')
+                                elif sch.sF==False and pt==True: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Crew is not in list wwf,bud,blue,rock,silver,gold,student')
                             elif sch.sF==False and pt==True: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Insufficient gap time between this shift and another')
                         elif sch.sF==False and pt==True: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Total consecutive hours would exceed 12')
                     elif sch.sF==False and pt==True: sch.assnLog.append('   Fail to assign '+self.firstNm[0]+'. '+self.lastNm+' to ' +sl.dispNm+ ' '+sch.slLeg[sl.seqID-1][1]+' '+sch.slLeg[sl.seqID-1][2]+' || Is already assigned for slot in same time period')
@@ -226,8 +228,9 @@ class ee():
 
 class Schedule():
     def __init__(self,Acrew,slots,ee,preAssn,senList,polling,slLeg,sF=False,pNT=False):
+        # self.ftInfoTbl=ftInfoTbl
         self.pNT=pNT #if True prints '...Not Trained'' statement as applicable when testing if a given slot is ok for someone
-        self.sF=sF #suppressFails.. if true, prints out 'failed to schedule' statements
+        self.sF=sF #suppressFails.. if false, prints out 'failed to schedule' statements
         self.Acrew=Acrew
         if Acrew=='Bud':self.Bcrew='Blue'
         else:self.Bcrew='Bud'
@@ -293,7 +296,7 @@ class Schedule():
         for k in self.slots:
             s=self.slots[k]
             for e in s.eligVol:
-                if self.ee[e].slOK(self,s,poll=tls.viewTBL('allPollData',filterOn=[('eeid',e)])[0]) is not True:
+                if self.ee[e].slOK(self,s,poll=tls.viewTBL('allPollData',filterOn=[('eeid',e)])[0],pt=False) is not True:
                     s.eligVol.pop(s.eligVol.index(e))
 
     def nextSlots(self,force=0):
@@ -357,15 +360,15 @@ class Schedule():
                 if self.ee[lowManID].slOK(self,sl,tp='F'): return lowManID,'F'
             return None,'N' #No one to force
 
-    @debug
+    # @debug
     def fillOutSched_v2(self,noVol=None,iter=0):
         """Fills out schedule in a recursive way... see blog... when filling with voluntary folks, if a slot with no takers is encountered and has never been identified as such before, then restart from a fresh sched seed where that slot is forced before any voluntary assignments happen"""
         iter+=1
         WIPschd=deepcopy(self) #WIPschd will have assignments made to it. 'Self' is kept with only the AssnList stuff coming into this point so that across multiple iterations where the NoVol list is potentially expanded, it serves as the blank slate 
         if iter==1: #First iteration. Initialize noEligVol list. Do not define it this way in future iterations, because you will lose the slots that were discovered that needed to be added!
-            WIPschd.noVol=[k for k in WIPschd.slots if len(WIPschd.slots[k].eligVol)==0 and WIPschd.slots[k].assnType not in ['DNS','WWF']]
+            WIPschd.noVol=[k for k in WIPschd.slots if len(WIPschd.slots[k].eligVol)==0 and WIPschd.slots[k].assnType not in ['DNS','WWF','V','F']]
         else: #2nd and further iterations.. coming here because more slots were found to force and would've passed along in function call... so retrieve them here
-            WIPschd.noVol=noVol 
+            WIPschd.noVol=noVol
         #===Logging for printout
         WIPschd.assnLog.append('Iteration: '+str(iter)+' ||  Starting Schedule With Identified Priority Slots, Forcing As Necessary:')
         mynoVol=''
@@ -397,7 +400,7 @@ class Schedule():
         OldToAssn=[k for k in WIPschd.slots if (len(WIPschd.slots[k].eligVol)>0) and WIPschd.slots[k].assnType not in ['WWF','F','V','nV','DNS','N'] ]
         NumSl=len(OldToAssn)
         #===========Printouts for Reporting
-        appn='Second Phase Assignments (Sequence by Most Constrained): '+str(NumSl)+' || '
+        appn='Second Phase Assignments (Sequence by Most Constrained): '+str(NumSl)+' slots  ||  '
         for x in OldToAssn: appn+=x+' - '
         WIPschd.assnLog.append(appn)
         for i in range(NumSl): #Iterate across all slots identified at the start
@@ -633,6 +636,7 @@ class Schedule():
             styleNfill(cl,s)
         #=========================================
         #Go through the schedule to add the (1/3),(1/2),(2/2) etc etc etc slot identifiers for human readibility
+        #Define helper function
         def ranges(nums):
             """Returns a list of (open,close) intervals a list spans"""
             nums = sorted(set(nums))
@@ -640,6 +644,7 @@ class Schedule():
             edges = iter(nums[:1] + sum(gaps, []) + nums[-1:])
             return list(zip(edges, edges))
         #===================
+        #Proceed with helper function
         for k in self.slots:
             s=self.slots[k] #Retrieve slot
             if s.assignee!=None:
@@ -703,10 +708,11 @@ class Schedule():
         #=============================================
         #Print assignments to a separate sheet, sequenced by seniority
         ws2 = wb.create_sheet(title="Assignments (Sen'ty)")
-        ws2.cell(row=1,column=1).value='Seniority'
-        ws2.cell(row=1,column=2).value='Employee ID'
-        ws2.cell(row=1,column=3).value='Time slots'
-        n=0
+        ws2.cell(row=2,column=1).value='Seniority'
+        ws2.cell(row=2,column=2).value='Employee ID'
+        ws2.cell(row=2,column=3).value='Time slots'
+        # ws2.cell(row=1,column=1).value='Note that the seniority value presented is not actual plant seniority number, but just the sequence of '
+        n=1
         for i in range(len(self.senList)-1):
             eId=self.senList[i][2]
             if len(self.ee[eId].assignments)>0 and self.slots[self.ee[eId].assignments[0]].assnType!='WWF':#If the person has an assignment and isn't WWF, print it
@@ -718,7 +724,27 @@ class Schedule():
                     styleNfill(ws2.cell(row=n+1,column=3+c),self.slots[k])
                     ws2.cell(row=n+1,column=3+c).value=self.slots[k].dispNm+' '+ self.slLeg[self.slots[k].seqID-1][2]+' ('+self.slLeg[self.slots[k].seqID-1][1]+')'
                     c+=1
+        #=============================================
+        #Print assignments to a separate sheet, in alphabetical order by last name
+        ws2 = wb.create_sheet(title="Assignments (Alpha)")
+        ws2.cell(row=2,column=1).value='Last, First'
+        ws2.cell(row=2,column=2).value='Time slots'
+        # ws2.cell(row=1,column=1).value='Note that the seniority value presented is not actual plant seniority number, but just the sequence of '
+        n=1
+        for rec in tls.viewTBL('senRef',sortBy=[('last','ASC')]):
+            eId=rec[2]
+            if len(self.ee[eId].assignments)>0 and self.slots[self.ee[eId].assignments[0]].assnType!='WWF':#If the person has an assignment and isn't WWF, print it
+                n+=1
+                ws2.cell(row=n+1,column=1).value=self.ee[eId].lastNm+', '+self.ee[eId].firstNm[0]+'.'
+                # ws2.cell(row=n+1,column=2).value=eId
+                c=0
+                for k in sorted(self.ee[eId].assignments,key=lambda k:int(k[:k.index('_')])):
+                    styleNfill(ws2.cell(row=n+1,column=2+c),self.slots[k])
+                    # ws2.cell(row=n+1,column=2+c).value=self.slots[k].dispNm+' '+ self.slLeg[self.slots[k].seqID-1][2]+' ('+self.slLeg[self.slots[k].seqID-1][1]+')'
+                    ws2.cell(row=n+1,column=2+c).value=self.slLeg[self.slots[k].seqID-1][2]+' ('+self.slLeg[self.slots[k].seqID-1][1]+')'
+                    c+=1
         #==========================
+
         wb.save(filename = dest_filename)
         return dest_filename
         
