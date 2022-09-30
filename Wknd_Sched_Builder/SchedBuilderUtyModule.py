@@ -202,6 +202,20 @@ def imptXlTbl(XlFl,ShtNm,TblNm):
     tab=[[x.value for x in sublist] for sublist in ws[tab.ref]] #Convert to list of lists (each sublist as row of excel table)
     return tab[1:] #Convert nested lists to array, dropping first row which is table headings
 
+def imptPolltbl(XlFl,ShtNm,TblNm,tp=None):
+    myWb=pyxl.load_workbook(XlFl) 
+    ws=myWb[ShtNm]
+    tab=ws.tables[TblNm] #Pull out table
+    tab=[[x.value for x in sublist] for sublist in ws[tab.ref]] #Convert to list of lists (each sublist as row of excel table)
+    tab=tab[1:] #Remove header column
+    if tp=='FT': #Pull only FT's into FT table
+        tab=[rec for rec in tab if rec[3]!=None] #Remove rows without refusal hours
+        tab=[rec for rec in tab if rec[3]<10000] #Ft's id'd by less than 10k refusal hours
+    if tp=='P': #Pull only probationaries into table
+        tab=[rec for rec in tab if rec[3]!=None] #Remove rows without refusal hours
+        tab=[rec for rec in tab if rec[3]>=10000] #Probationaries ID'd by 10K or more refusal hours
+    return tab
+
 def generateMasterPollTbl(pollDict):
     """Given a dictionary containing the polling tables for all crews, generates a master tbl in SQLlite for being able to filter on peoples availabilities, with '1' indicating interest, '0' no interest, and slot seq 1 starting at index 4"""
     mPollTbl=[]
@@ -237,10 +251,20 @@ def pullTbls(FtBook,TempBook,AssnBook,PollBook):  #Need to make volunteer shift 
     g=imptXlTbl(AssnBook,'Job_Training_Crossref','TrainAssnMtx') #to sqlite
     pollDict={} #Generate empty dictionary to store tables of people voluntary overtime
     for crew in ['Blue','Bud','Rock']:
-        for eeType in ['FT','Temp']:
-            keyNm='tbl_'+crew+eeType
-            tbl=imptXlTbl(PollBook,'Sheet1',keyNm)
-            pollDict[keyNm]=tbl
+        for eeType in ['FT','P','Temp']:
+            if eeType=='Temp': #If type= Temp, proceed to build table
+                keyNm='tbl_'+crew+eeType
+                tbl=imptXlTbl(PollBook,'Sheet1',keyNm)
+            else:
+                keyNm='tbl_'+crew+'FT' #If type= FT OR Probationary, will be referring to FT table in excel, so hard code the string
+                tbl=imptPolltbl(PollBook,'Sheet1',keyNm,tp=eeType)
+            if eeType=='P': #keyNm was made "FT" instead of 'P' so need to manually enter the key when generating dictionry entry
+                pollDict['tbl_'+crew+'P']=tbl
+            else:
+                pollDict[keyNm]=tbl
+    pollDict['tbl_wFT']=imptPolltbl(PollBook,'Sheet1','tbl_wFT',tp='FT') #No nice loop to initialize the WWF crew tables in poll sheet
+    pollDict['tbl_wP']=imptPolltbl(PollBook,'Sheet1','tbl_wFT',tp='P')
+    pollDict['tbl_wT']=imptXlTbl(PollBook,'Sheet1','tbl_wT')
     h=imptXlTbl(AssnBook,'All_Slots','All_Slots')
     #Generate tables in sqlite
     addTBL("sklMtx",fields=["EEID","trnNm"],data=b,addOn=False) #Overwrite all training data and populate FT ops, then append temps for a master table
@@ -311,11 +335,11 @@ def makeSlots(eeDict,AllSlots):
                 elig=[] #To track how many people trained
                 for rec in viewTBL('allPollData',filterOn=[('slot_'+str(sl.seqID),'y')]): # iterate through results (employee info's) of query on who said yes to working at the time of this slot
                     if sl.dispNm in eeDict[rec[0]].skills: elig.append(rec[0]) #Append EEID to list 'elig' if the ee is trained on the job
-                sl.eligVol=elig # True values as 1.. sum to see number of eligible volunteers for the slot.
+                sl.eligVol=elig # TTake len() to see number of eligible volunteers for the slot.
                 openSlots[str(sl.seqID)+'_'+str(sl.dispNm)]=sl #Enter it into the dictionary
     return openSlots
 
-def preProcessData(Acrew,wkHrs,FtBook,TempBook,AssnBook,PollBook,pNT=False):
+def preProcessData(Acrew,wkHrs,FtBook,TempBook,AssnBook,PollBook,pNT=False,assnWWF=False):
     """A function to take input data and generate all necessary tables and objects in memory to carry out algorithm. Return Schedule object containing all workSlot objects, and dictioanry fo all employee objects"""
     ftInfoTbl, ftSkillsMtx, tempInfoTbl, tempSkillsMtx, AssignmentsTbl, slot_Legend, JobTrnCrossRef,pollDict,AllSlots,senList=pullTbls(FtBook,TempBook,AssnBook,PollBook)
     #GenerateMasterPollTbl to facilitate making the Slots... require having a table with all employee preferences.
@@ -324,45 +348,7 @@ def preProcessData(Acrew,wkHrs,FtBook,TempBook,AssnBook,PollBook,pNT=False):
     eeDict=makeEEdict(ftInfoTbl,tempInfoTbl,wkHrs)
     #Generate Schedule Slot objects (all unassigned slots for weekend)
     allSlots=makeSlots(eeDict,AllSlots)
-    return Schedule(Acrew,allSlots,eeDict,AssignmentsTbl,senList,pollDict,slot_Legend,pNT=pNT)
+    return Schedule(Acrew,allSlots,eeDict,AssignmentsTbl,senList,pollDict,slot_Legend,pNT=pNT,assnWWF=assnWWF)
 
 
 
-
-def pullSomeTbls(FtBook,TempBook,AssnBook,PollBook):  #Need to make volunteer shift data puller
-    """Take flNm, return ftInfoTbl, ftSkillsMtx, tempInfoTbl, tempSkillsMtx, AssignmentsTbl, slot_Legend, JobTrnCrossRef, pollDict, All_Slots, senList.   Uses functions defined previously to return all required tables at once. Function of functions for final script"""
-    a=getFTinfo(FtBook) #to sqlite
-    b=getFTskills(FtBook) #to sqlite
-    b=[[int(d[0]),d[1]] for d in b] #Cast EEid to numeric value
-    c=getTempinfo(TempBook) #to sqlite
-    d=getTempskills(TempBook) #to sqlite
-    d=[[int(data[0]),data[1]] for data in d] #Cast EEid to numeric value
-    e=imptXlTbl(AssnBook,'Assignment_List','Assn_List')
-    f=imptXlTbl(AssnBook,'Slot_Legend','Slot_Legend')
-    g=imptXlTbl(AssnBook,'Job_Training_Crossref','TrainAssnMtx') #to sqlite
-    pollDict={} #Generate empty dictionary to store tables of people voluntary overtime
-    for crew in ['Blue','Bud','Rock','Silver','Gold']:
-        for eeType in ['FT','Temp']:
-            keyNm='tbl_'+crew+eeType
-            tbl=imptXlTbl(PollBook,'Sheet1',keyNm)
-            pollDict[keyNm]=tbl
-    h=imptXlTbl(AssnBook,'All_Slots','All_Slots')
-    #Generate tables in sqlite
-    addTBL("sklMtx",fields=["EEID","trnNm"],data=b,addOn=False) #Overwrite all training data and populate FT ops, then append temps for a master table
-    addTBL("sklMtx",fields=["EEID","trnNm"],data=d,addOn=True)
-    addTBL("xRef",fields=["dispNm","trnNm"],data=g,addOn=False) #Skill name cross ref table for fcn dispToTrn to work
-    addTBL("FTinfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],data=a,addOn=False)
-    addTBL("TempInfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],data=c,addOn=False)
-    # addTBL("FTinfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],dTypes=['NUM','TEXT','NUM','TEXT','TEXT','NUM','NUM','NUM'],data=a,addOn=False)
-    # addTBL("TempInfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],dTypes=['INTEGER','TEXT','INTEGER','TEXT','TEXT','INTEGER','INTEGER','INTEGER'],data=c,addOn=False)
-    #Generate a master seniority table.. following replaces hire date with integers for temps
-    senHiLoTemps=viewTBL('TempInfo',sortBy=[('sen','ASC')]) #First retrieve list of temps, most senior to least
-    i=100000 #Start new seniority number at arbitrarily high value not to interfere with full timer
-    for row in senHiLoTemps:
-        row[0]=i
-        i+=1
-    #Overwrite/make new master sen ref table. Then append the Temp data with integerized values
-    addTBL("senRef",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],data=a,addOn=False)
-    addTBL("senRef",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],data=senHiLoTemps,addOn=True)
-    senList=viewTBL('senRef',sortBy=[('sen','ASC')])
-    return a,b,c,d,e,f,g,pollDict,h,senList
