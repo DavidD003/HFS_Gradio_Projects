@@ -339,7 +339,7 @@ def makeSlots(eeDict,AllSlots):
                 openSlots[str(sl.seqID)+'_'+str(sl.dispNm)]=sl #Enter it into the dictionary
     return openSlots
 
-def preProcessData(Acrew,wkHrs,FtBook,TempBook,AssnBook,PollBook,pNT=False,assnWWF=False):
+def preProcessData(Acrew,wkHrs,FtBook,TempBook,AssnBook,PollBook,pNT=False,assnWWF=False,pVol=True,xtraDays=None):
     """A function to take input data and generate all necessary tables and objects in memory to carry out algorithm. Return Schedule object containing all workSlot objects, and dictioanry fo all employee objects"""
     ftInfoTbl, ftSkillsMtx, tempInfoTbl, tempSkillsMtx, AssignmentsTbl, slot_Legend, JobTrnCrossRef,pollDict,AllSlots,senList=pullTbls(FtBook,TempBook,AssnBook,PollBook)
     #GenerateMasterPollTbl to facilitate making the Slots... require having a table with all employee preferences.
@@ -348,7 +348,7 @@ def preProcessData(Acrew,wkHrs,FtBook,TempBook,AssnBook,PollBook,pNT=False,assnW
     eeDict=makeEEdict(ftInfoTbl,tempInfoTbl,wkHrs)
     #Generate Schedule Slot objects (all unassigned slots for weekend)
     allSlots=makeSlots(eeDict,AllSlots)
-    return Schedule(Acrew,allSlots,eeDict,AssignmentsTbl,senList,pollDict,slot_Legend,pNT=pNT,assnWWF=assnWWF)
+    return Schedule(Acrew,allSlots,eeDict,AssignmentsTbl,senList,pollDict,slot_Legend,pNT=pNT,assnWWF=assnWWF,pVol=pVol,xtraDays=xtraDays)
 
 
 
