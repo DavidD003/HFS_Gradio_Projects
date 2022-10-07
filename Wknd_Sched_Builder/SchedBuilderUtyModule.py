@@ -1,28 +1,29 @@
-from SchedBuilderClasses import *
+from SchedBuilderClasses2 import *
 import openpyxl as pyxl
 import pandas as pd
 import numpy as np
 import sqlite3
+import functools
 
 
-# def debug(func):
-#     """Print the function signature and return value"""
-#     @functools.wraps(func)
-#     def wrapper_debug(*args, **kwargs):
-#         args_repr = [repr(a) for a in args]                      # 1
-#         kwargs_repr = [f"{k}={v!r}" for k, v in kwargs.items()]  # 2
-#         signature = ", ".join(args_repr + kwargs_repr)           # 3
-#         print(f"Calling {func.__name__}({signature})")
-#         value = func(*args, **kwargs)
-#         print(f"{func.__name__!r} returned {value!r}")           # 4
-#         return value
-#     return wrapper_debug
+def debug(func):
+    """Print the function signature and return value"""
+    @functools.wraps(func)
+    def wrapper_debug(*args, **kwargs):
+        args_repr = [repr(a) for a in args]                      # 1
+        kwargs_repr = [f"{k}={v!r}" for k, v in kwargs.items()]  # 2
+        signature = ", ".join(args_repr + kwargs_repr)           # 3
+        print(f"Calling {func.__name__}({signature})")
+        value = func(*args, **kwargs)
+        print(f"{func.__name__!r} returned {value!r}")           # 4
+        return value
+    return wrapper_debug
 
 
 
 def addTBL(tblName,fields="",dTypes=None,data=None,addOn=False):
     """Create table if not already existing, optionally with data, optionally clearing out old data if present. Fields as list of strings. Datatypes as list of strings, one must be provided for each field. See sqlite3 docs for mroe info"""
-    conn = sqlite3.connect('test14.db')
+    conn = sqlite3.connect('test16.db')
     c = conn.cursor()
     listedFields=''
     if fields=="": #If none given, make alphabetical
@@ -61,7 +62,7 @@ def isNumeric(n):
 
 def viewTBL(tblName,fields=None,sortBy=None,filterOn=None,returnStatement=0):
     """return np array of table with optional select fields, filtered, sorted. Sort syntax=[(field1,asc/desc),(field2,asc/desc)...] Filter syntax=[(field1,value),(field2,value)...]"""
-    conn = sqlite3.connect('test14.db')
+    conn = sqlite3.connect('test16.db')
     c = conn.cursor()
     stmnt='SELECT '
     if fields!=None: 
@@ -315,14 +316,15 @@ def makeEEdict(ftInfoTbl,tempInfoTbl,wkHrs):
     for dtaTbl in [ftInfoTbl,tempInfoTbl]:
         for row in dtaTbl:
             # if row[1].lower().strip() in ['wwf','bud','blue','rock','silver','gold','student']: #Omit people not in packaging, or off, vacation etc
-            eeSkills=viewTBL('sklMtx',['trnNm'],filterOn=[('EEID',row[2])])
-            eeSkills=[trnToDisp(nm[0]) for nm in eeSkills] #Gather display names for skills trained on, reducing lists within list to spread elements
-            sk=[] #Create empty to accumulate all skills present within sublists of eeSkills
-            for s in eeSkills:
-                sk.extend(s)
-            sen=viewTBL('senRef',fields=['sen'],filterOn=[('id',str(row[2]))])[0][0]
-            anEE=ee(sen,row[1].lower().strip(),int(row[2]),row[3],row[4],row[5],row[8]+wkHrs,skills=sk) #Pull info from Refusals sheet
-            eeDict[anEE.eeID]=anEE
+            if row[2] not in list(eeDict.keys()): #Double check ee hasn't already been generated... why Cory would include an ee on temp table with crew reading 'fulltime' is beyond me but there you go
+                eeSkills=viewTBL('sklMtx',['trnNm'],filterOn=[('EEID',row[2])])
+                eeSkills=[trnToDisp(nm[0]) for nm in eeSkills] #Gather display names for skills trained on, reducing lists within list to spread elements
+                sk=[] #Create empty to accumulate all skills present within sublists of eeSkills
+                for s in eeSkills:
+                    sk.extend(s)
+                sen=viewTBL('senRef',fields=['sen'],filterOn=[('id',str(row[2]))])[0][0]
+                anEE=ee(sen,row[1].lower().strip(),int(row[2]),row[3],row[4],row[5],row[8]+wkHrs,skills=sk) #Pull info from Refusals sheet
+                eeDict[anEE.eeID]=anEE
     return eeDict
 
 def makeSlots(eeDict,AllSlots):
@@ -339,7 +341,7 @@ def makeSlots(eeDict,AllSlots):
                 openSlots[str(sl.seqID)+'_'+str(sl.dispNm)]=sl #Enter it into the dictionary
     return openSlots
 
-def preProcessData(Acrew,wkHrs,FtBook,TempBook,AssnBook,PollBook,pNT=False,assnWWF=False,pVol=True,xtraDays=None):
+def preProcessData(Acrew,wkHrs,FtBook,TempBook,AssnBook,PollBook,pNT=False,assnWWF=False,pVol=True,xtraDays=None,maxI=100):
     """A function to take input data and generate all necessary tables and objects in memory to carry out algorithm. Return Schedule object containing all workSlot objects, and dictioanry fo all employee objects"""
     ftInfoTbl, ftSkillsMtx, tempInfoTbl, tempSkillsMtx, AssignmentsTbl, slot_Legend, JobTrnCrossRef,pollDict,AllSlots,senList=pullTbls(FtBook,TempBook,AssnBook,PollBook)
     #GenerateMasterPollTbl to facilitate making the Slots... require having a table with all employee preferences.
@@ -348,7 +350,7 @@ def preProcessData(Acrew,wkHrs,FtBook,TempBook,AssnBook,PollBook,pNT=False,assnW
     eeDict=makeEEdict(ftInfoTbl,tempInfoTbl,wkHrs)
     #Generate Schedule Slot objects (all unassigned slots for weekend)
     allSlots=makeSlots(eeDict,AllSlots)
-    return Schedule(Acrew,allSlots,eeDict,AssignmentsTbl,senList,pollDict,slot_Legend,pNT=pNT,assnWWF=assnWWF,pVol=pVol,xtraDays=xtraDays)
+    return Schedule(Acrew,allSlots,eeDict,AssignmentsTbl,senList,pollDict,slot_Legend,pNT=pNT,assnWWF=assnWWF,pVol=pVol,xtraDays=xtraDays,maxI=maxI)
 
 
 
