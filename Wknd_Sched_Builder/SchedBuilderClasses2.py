@@ -53,6 +53,9 @@ class Slot():
                 #del sch.slots[self.key()]
             if slAssignee is not None: #Case of specific assignment, only not follwoed through when its no ee and DNS
                 sch.ee[slAssignee].assnBookKeeping(self,sch) #add this slot to the ee's assigned slot dictionary & other tasks
+                sch.assignments+=1
+                sch.aOnly.append((sch.assignments,sch.ee[slAssignee].dispNm(),self.key(),assnType))
+                
         #Logging for printout after
         if assnType!=None and slAssignee!=None:
             logTxt=''
@@ -94,9 +97,11 @@ class ee():
     def dispNm(self,slt=None):
         if slt is None:
             if int(self.seniority)>50000: return self.firstNm[0]+'.'+self.lastNm[0]+self.lastNm[1:].lower()+'(T)' #Case of Temps
-            else: return self.firstNm[0]+'.'+self.lastNm[0]+self.lastNm[1:].lower()
-        else: #Can make functionality to pass in 'MESR' to display name based on some slot criteria?
-            pass
+            else: return (self.firstNm[0]+'.'+self.lastNm[0]+self.lastNm[1:].lower()).replace(' ','-')
+        # elif : #Can make functionality to pass in 'MESR' to display name based on some slot criteria?
+            # pass
+        elif slt=='read':
+            return (self.firstNm[0]+'.'+self.lastNm[0]+self.lastNm[1:].lower()).replace(' ','-')
 
     def frcOK(self,sch):
         """Returns if the present assignments are permissible with rules around forcing limitations"""
@@ -248,7 +253,7 @@ class ee():
         return False
 
 class Schedule():
-    def __init__(self,Acrew,slots,ee,preAssn,senList,polling,slLeg,sF=False,pNT=False,assnWWF=False,pVol=False,xtraDays=None,maxI=100):
+    def __init__(self,Acrew,slots,ee,preAssn,senList,polling,slLeg,sF=False,pNT=True,assnWWF=False,pVol=True,xtraDays=None,maxI=100):
         # self.ftInfoTbl=ftInfoTbl
         self.xtraDays=xtraDays #Selected on Gradio interface. a list of Monday and or Friday if those are to be scheduled. Used obly for gapOK funciton 
         if 'Friday' in xtraDays: self.friOT=True
@@ -275,8 +280,10 @@ class Schedule():
         seqIDs=[int(k[:k.index('_')]) for k in self.slots]
         self.rev=0
         self.noVol=[] #A list to contain keys of slots with no eligible volunteers.
-        self.assns=0
+        self.assignments=1
         self.maxI=maxI
+        self.aOnly=[]
+        self.assns=0
     
     # @debug
     def trackAssn(self,i=0,loc=None):
@@ -402,8 +409,21 @@ class Schedule():
             self.assnLog.append('NO STAFF! No one to force to '+sl.key())
             return None,'N' #No one to force
 
+    def checkForceStop(self,tup,iter,assn):
+        if tup!=None:
+            if iter==tup[0] and assn==tup[1]: return True
+            else: return False
+        else: return None
+
+    def handleAssnLog(self,WIPschd):
+        self.assnLog.extend(WIPschd.assnLog) #Add whats been logged this final iteration to master log
+        self.assnLog.extend(['final iteration: '+str(iter)])
+        WIPschd.assnLog=self.assnLog #Replace WIP with the master now that master had WIP tacked on to WWF assn since WIP sched object being passed as final outcome
+        return WIPschd
+        
+    
     @debug
-    def fillOutSched_v3(self,noVol=None,iter=0,pre8={},last=None):
+    def fillOutSched_v3(self,noVol=None,iter=0,pre8={},last=None,stop=None):
         """Improvement on v2 to prioritize voluntary 8 hour over voluntary 4hr, plus WWF crew assigning on long weekends"""
         if iter>self.maxI: return last
         #Setup
@@ -441,9 +461,15 @@ class Schedule():
                     if WIPschd.slots[k].assnType not in ['V','F']: #If k1 was already reached on prev iteration through k loop then don't perform assn function again
                         WIPschd.trackAssn(self.assns,loc='pre8 Success 1')
                         r=WIPschd.slots[k].assn(WIPschd,assnType="V",slAssignee=eId) 
+                        if self.checkForceStop(stop,iter,WIPschd.assignments)==True: 
+                            WIPschd=self.handleAssnLog(WIPschd)
+                            return WIPschd
                     if WIPschd.slots[k2].assnType not in ['V','F']: #See above
                         WIPschd.trackAssn(self.assns,loc='pre8 Success 2')
                         r=WIPschd.slots[k2].assn(WIPschd,assnType="V",slAssignee=eId) #Assign both. When the second one gets iterated to, slOK will return False for being assigned on same slot arleady and itll be harmless
+                        if self.checkForceStop(stop,iter,WIPschd.assignments)==True: 
+                            WIPschd=self.handleAssnLog(WIPschd)
+                            return WIPschd
                 #If this ee was forced earlier and so they are no longer ok for the full8 assign, then the pre8 is effectively skipped and re evaluated in the '8hr assn' phase
             else: #Case of assigning a slot not from pre8 list
                 s=WIPschd.slots[k]
@@ -451,6 +477,9 @@ class Schedule():
                 eId,tp=WIPschd.pickAssignee(s,tp='F')
                 WIPschd.trackAssn(self.assns,loc='force phase')
                 r=WIPschd.slots[k].assn(WIPschd,assnType=tp,slAssignee=eId) #return value to variable r is false if making that force assignments breaks rules around forcing past 48 hrs in week
+                if self.checkForceStop(stop,iter,WIPschd.assignments)==True: 
+                    WIPschd=self.handleAssnLog(WIPschd)
+                    return WIPschd
                 if r==False and s.key() not in WIPschd.noVol: #also check if this slot is already in noVol list. Coming to this statement after the fact, I realize there isn't any sensical logic path happening here if the persons forcing broke a rule, but the slot is not in the list. I realize this is because I wrote this if statement at a point where I thought forcings might happen mid-iteration, but after making it so that forcings only happen start of iteration, I think this if statement will never be met. That's because at this point in the algorithm, no voluntary weekend OT has been assigned. but the point of the 'return value' was checking if already-assigned voluntary OT happends before or after the OT that is being forced. But since no voluntary OT has been assigned at all, the return constraint will always be ok. The pickAssignee() method will always return the guy who si to be assigned because if the perosn simply worked enough OT in the week that they can't be forced, then the pickAssignee wouldn't havepicked them anyways
                     WIPschd.noVol.append(s.key())
                     WIPschd.assnLog.append('The last assignment created a broken schedule where the person' +WIPschd.ee[eId].lastNm+' had a forcing (previously assigned) after 48h in the week (just assigned.) Adding this slot to priority sequence and reiterating')
@@ -506,6 +535,9 @@ class Schedule():
                                     r1=WIPschd.slots[k1].assn(WIPschd,assnType="V",slAssignee=eId)
                                     WIPschd.trackAssn(self.assns,loc='asn 8 on shift 2')
                                     r2=WIPschd.slots[k2].assn(WIPschd,assnType="V",slAssignee=eId) #Don't need to check r1 or r2, they are redudnant with passing through frcOKdblAssn to get here
+                                    if self.checkForceStop(stop,iter,WIPschd.assignments)==True: 
+                                        WIPschd=self.handleAssnLog(WIPschd)
+                                        return WIPschd
                                     s=1
                                     #------ Check if their assignments being made requires that another slot be forced due to losing eligVol
                                     newK=set([k for k in WIPschd.slots if len(WIPschd.slots[k].eligVol)==0 and WIPschd.slots[k].assnType not in ['WWF','F','V','nV','DNS','N']]) #After assignment, see if anything now needing forcing that hasn't been seen before
@@ -544,8 +576,14 @@ class Schedule():
                                 if WIPschd.ee[eId].frcOKdblAssn(WIPschd,WIPschd.slots[k1]): #If function returns true.. no forcing rules were broken
                                     WIPschd.trackAssn(self.assns,loc='asn 8 straddle 1')
                                     r1=WIPschd.slots[k1].assn(WIPschd,assnType="V",slAssignee=eId)
+                                    if self.checkForceStop(stop,iter,WIPschd.assignments)==True: 
+                                        WIPschd=self.handleAssnLog(WIPschd)
+                                        return WIPschd
                                     WIPschd.trackAssn(self.assns,loc='asn 8 straddle 2')
                                     r2=WIPschd.slots[k2].assn(WIPschd,assnType="V",slAssignee=eId) #Don't need to check r1 or r2, they are redudnant with passing through frcOKdblAssn to get here
+                                    if self.checkForceStop(stop,iter,WIPschd.assignments)==True: 
+                                        WIPschd=self.handleAssnLog(WIPschd)
+                                        return WIPschd
                                     s=1
                                     #------ Check if their assignments being made requires that another slot be forced due to losing eligVol
                                     newK=set([k for k in WIPschd.slots if len(WIPschd.slots[k].eligVol)==0 and WIPschd.slots[k].assnType not in ['WWF','F','V','nV','DNS','N']]) #After assignment, see if anything now needing forcing that hasn't been seen before
@@ -611,6 +649,9 @@ class Schedule():
                     eId,tp=WIPschd.pickAssignee(curS)
                     WIPschd.trackAssn(self.assns,loc='4 hr assn')
                     r=WIPschd.slots[curS.key()].assn(WIPschd,assnType=tp,slAssignee=eId) #Note the assign method acts on original, not deepcopy, retrieved via key
+                    if self.checkForceStop(stop,iter,WIPschd.assignments)==True: 
+                            WIPschd=self.handleAssnLog(WIPschd)
+                            return WIPschd
                     newK=set([k for k in WIPschd.slots if len(WIPschd.slots[k].eligVol)==0 and WIPschd.slots[k].assnType not in ['WWF','F','V','nV','DNS','N']]) #After assignment, see if anything now needing forcing that hasn't been seen before
                     if len(newK-set(WIPschd.noVol))>0: #Case that a forced assignment made someone ineligible for a slot they were marked as the last volunteer in, creating a slot requiring forcing that hasn't been seen before, requiring re iteration
                         pullK=newK-set(WIPschd.noVol) #Get the keys for slots that are now without volunteers(could be more than one so use set subtraction)
@@ -633,9 +674,10 @@ class Schedule():
                     #     return self.fillOutSched_v3(WIPschd.noVol,iter,pre8=pre8,last=WIPschd)
                 WIPschd.assnLog.extend([str(i)+' of '+str(NumSl-1)])
                 if i==NumSl-1:
-                    WIPschd.assnLog.extend(['MADE IT'])
+                    WIPschd.assnLog.extend(['Done.'])
                     self.assnLog.extend(WIPschd.assnLog) #Add whats been logged this final iteration to master log
-                    WIPschd.assnLog=self.assnLog #Replace WIP with the master since WIP sched object being passed as final outcome
+                    WIPschd.assnLog=self.assnLog #Replace WIP with the master now that master had WIP tacked on to WWF assn since WIP sched object being passed as final outcome
+                    self.assnLog.extend(['final iteration: '+str(iter)])
                     # return self.fillOutSched_v3(WIPschd.noVol,iter,pre8=pre8,winner=WIPschd)
                     return WIPschd#,'WIN' #Once all voluntary assignments made, schedule done? May need to force more, or go through force function to designate 'no staff' slots
             else: #Case that assignment being made resulted in more slots being left with no EligVol.. add those slots to noVol list and re start the function
@@ -993,25 +1035,6 @@ class Schedule():
             ws3.cell(row=2+c,column=2).value=self.slots[k].dispNm+' '+ self.slLeg[self.slots[k].seqID-1][2]+' ('+self.slLeg[self.slots[k].seqID-1][1]+')'
             c+=1
         #=============================================
-        #Print assignments to a separate sheet, sequenced by seniority
-        ws2 = wb.create_sheet(title="Assignments (Sen'ty)")
-        ws2.cell(row=2,column=1).value='Seniority'
-        ws2.cell(row=2,column=2).value='Employee ID'
-        ws2.cell(row=2,column=3).value='Time slots'
-        # ws2.cell(row=1,column=1).value='Note that the seniority value presented is not actual plant seniority number, but just the sequence of '
-        n=1
-        for i in range(len(self.senList)-1):
-            eId=self.senList[i][2]
-            if len(self.ee[eId].assignments)>0 and self.slots[self.ee[eId].assignments[0]].assnType!='WWF':#If the person has an assignment and isn't WWF, print it
-                n+=1
-                ws2.cell(row=n+1,column=2).value=self.senList[i][0]
-                ws2.cell(row=n+1,column=2).value=eId
-                c=0
-                for k in sorted(self.ee[eId].assignments,key=lambda k:int(k[:k.index('_')])):
-                    styleNfill(ws2.cell(row=n+1,column=3+c),self.slots[k])
-                    ws2.cell(row=n+1,column=3+c).value=self.slots[k].dispNm+' '+ self.slLeg[self.slots[k].seqID-1][2]+' ('+self.slLeg[self.slots[k].seqID-1][1]+')'
-                    c+=1
-        #=============================================
         #Print assignments to a separate sheet, in alphabetical order by last name
         ws2 = wb.create_sheet(title="Assignments (Alpha)")
         ws2.cell(row=2,column=1).value='Last, First'
@@ -1031,6 +1054,52 @@ class Schedule():
                     ws2.cell(row=n+1,column=2+c).value=self.slLeg[self.slots[k].seqID-1][2]+' ('+self.slLeg[self.slots[k].seqID-1][1]+')'
                     c+=1
         #==========================
+        #Print succint assignment log to a separate sheet
+        ws2 = wb.create_sheet(title="Succint Ass'n Log")
+        ws2.cell(row=1,column=1).value="This data can be used on Tab C of the schedule building web app to investigate what a schedule looked like mid-generation"
+        ws2.cell(row=2,column=1).value='Assn #'
+        ws2.cell(row=2,column=2).value='EE Nm'
+        ws2.cell(row=2,column=3).value='Slot #_Job Nm'
+        ws2.cell(row=2,column=4).value='Assignment Type'
+        n=1
+        for rec in self.aOnly:
+            ws2.cell(column=1,row=2+n).value=rec[0]
+            ws2.cell(column=2,row=2+n).value=rec[1]
+            ws2.cell(column=3,row=2+n).value=rec[2]
+            ws2.cell(column=4,row=2+n).value=rec[3]
+            n+=1
+        #==========================
+        #Print verbose assignment log to a separate sheet
+        ws2 = wb.create_sheet(title="Verbose Ass'n Log")
+        ws2.cell(row=2,column=1).value='List of assignment decisions made throughout scheduling process'
+        # ws2.cell(row=1,column=1).value='Note that the seniority value presented is not actual plant seniority number, but just the sequence of '
+        n=1
+        for rec in self.assnLog:
+            ws2.cell(column=1,row=2+n).value=rec
+            n+=1
+
+        #=============================================
+        #Print assignments to a separate sheet, sequenced by seniority
+        ws2 = wb.create_sheet(title="Assignments (Sen'ty)")
+        ws2.cell(row=2,column=1).value='Seniority'
+        ws2.cell(row=2,column=2).value='Employee ID'
+        ws2.cell(row=2,column=3).value='Time slots'
+        # ws2.cell(row=1,column=1).value='Note that the seniority value presented is not actual plant seniority number, but just the sequence of '
+        n=1
+        for i in range(len(self.senList)-1):
+            eId=self.senList[i][2]
+            if len(self.ee[eId].assignments)>0 and self.slots[self.ee[eId].assignments[0]].assnType!='WWF':#If the person has an assignment and isn't WWF, print it
+                n+=1
+                ws2.cell(row=n+1,column=2).value=self.senList[i][0]
+                ws2.cell(row=n+1,column=2).value=eId
+                c=0
+                for k in sorted(self.ee[eId].assignments,key=lambda k:int(k[:k.index('_')])):
+                    styleNfill(ws2.cell(row=n+1,column=3+c),self.slots[k])
+                    ws2.cell(row=n+1,column=3+c).value=self.slots[k].dispNm+' '+ self.slLeg[self.slots[k].seqID-1][2]+' ('+self.slLeg[self.slots[k].seqID-1][1]+')'
+                    c+=1
+
+               
+
 
         wb.save(filename = dest_filename)
         return dest_filename

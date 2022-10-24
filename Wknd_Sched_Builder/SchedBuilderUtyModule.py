@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import sqlite3
 import functools
+from copy import deepcopy
 
 
 def debug(func):
@@ -273,8 +274,6 @@ def pullTbls(FtBook,TempBook,AssnBook,PollBook):  #Need to make volunteer shift 
     addTBL("xRef",fields=["dispNm","trnNm"],data=g,addOn=False) #Skill name cross ref table for fcn dispToTrn to work
     addTBL("FTinfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],data=a,addOn=False)
     addTBL("TempInfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],data=c,addOn=False)
-    # addTBL("FTinfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],dTypes=['NUM','TEXT','NUM','TEXT','TEXT','NUM','NUM','NUM'],data=a,addOn=False)
-    # addTBL("TempInfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],dTypes=['INTEGER','TEXT','INTEGER','TEXT','TEXT','INTEGER','INTEGER','INTEGER'],data=c,addOn=False)
     #Generate a master seniority table.. following replaces hire date with integers for temps
     senHiLoTemps=viewTBL('TempInfo',sortBy=[('sen','ASC')]) #First retrieve list of temps, most senior to least
     i=100000 #Start new seniority number at arbitrarily high value not to interfere with full timer
@@ -311,20 +310,27 @@ def sklChk(eeid,dispNm):
         return True
 
 
-def makeEEdict(ftInfoTbl,tempInfoTbl,wkHrs):
+def makeEEdict(ftInfoTbl,tempInfoTbl,wkHrs=40,tp='id'):
     eeDict={}
     for dtaTbl in [ftInfoTbl,tempInfoTbl]:
         for row in dtaTbl:
             # if row[1].lower().strip() in ['wwf','bud','blue','rock','silver','gold','student']: #Omit people not in packaging, or off, vacation etc
             if row[2] not in list(eeDict.keys()): #Double check ee hasn't already been generated... why Cory would include an ee on temp table with crew reading 'fulltime' is beyond me but there you go
-                eeSkills=viewTBL('sklMtx',['trnNm'],filterOn=[('EEID',row[2])])
-                eeSkills=[trnToDisp(nm[0]) for nm in eeSkills] #Gather display names for skills trained on, reducing lists within list to spread elements
-                sk=[] #Create empty to accumulate all skills present within sublists of eeSkills
-                for s in eeSkills:
-                    sk.extend(s)
-                sen=viewTBL('senRef',fields=['sen'],filterOn=[('id',str(row[2]))])[0][0]
-                anEE=ee(sen,row[1].lower().strip(),int(row[2]),row[3],row[4],row[5],row[8]+wkHrs,skills=sk) #Pull info from Refusals sheet
-                eeDict[anEE.eeID]=anEE
+                if tp=='id':
+                    eeSkills=viewTBL('sklMtx',['trnNm'],filterOn=[('EEID',row[2])])
+                    eeSkills=[trnToDisp(nm[0]) for nm in eeSkills] #Gather display names for skills trained on, reducing lists within list to spread elements
+                    sk=[] #Create empty to accumulate all skills present within sublists of eeSkills
+                    for s in eeSkills:
+                        sk.extend(s)
+                    sen=viewTBL('senRef',fields=['sen'],filterOn=[('id',str(row[2]))])[0][0]
+                    anEE=ee(sen,row[1].lower().strip(),int(row[2]),row[3],row[4],row[5],row[8]+wkHrs,skills=sk) #Pull info from Refusals sheet
+                    eeDict[anEE.eeID]=anEE
+                elif tp=='nm':
+                    #Just need peoples names and EEID's linked from this.. enter dummy data for seniority, training, etc
+                    if dtaTbl==tempInfoTbl:sen=100000
+                    else: sen=1
+                    anEE=ee(sen,row[1].lower().strip(),int(row[2]),row[3],row[4],row[5],row[8]+wkHrs,skills=[])
+                    eeDict[anEE.dispNm().lower().replace(' ','-')]=anEE
     return eeDict
 
 def makeSlots(eeDict,AllSlots):
@@ -353,4 +359,92 @@ def preProcessData(Acrew,wkHrs,FtBook,TempBook,AssnBook,PollBook,pNT=False,assnW
     return Schedule(Acrew,allSlots,eeDict,AssignmentsTbl,senList,pollDict,slot_Legend,pNT=pNT,assnWWF=assnWWF,pVol=pVol,xtraDays=xtraDays,maxI=maxI)
 
 
+def getEEinfo(FtBook,TempBook):  #Need to make volunteer shift data puller
+    """Generate employee objects so as to be able to use their names to read pre generated schedule template."""
+    a=getFTinfo(FtBook) #to sqlite
+    b=getFTskills(FtBook) #to sqlite
+    b=[[int(d[0]),d[1]] for d in b] #Cast EEid to numeric value
+    c=getTempinfo(TempBook) #to sqlite
+    d=getTempskills(TempBook) #to sqlite
+    d=[[int(data[0]),data[1]] for data in d] #Cast EEid to numeric value
+    
+    addTBL("FTinfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],data=a,addOn=False)
+    addTBL("TempInfo",fields=['sen','crew','id','last','first','ytd','totref','totchrg','wtdOT'],data=c,addOn=False)
 
+    return a,c
+
+def addRecs(flNm,shNm,tblNm,data,otptNm='AutoPrimed_Template.xlsx'):
+    """Adds data to existing excel table in new rows. Used to flesh out tables in visual template (blank tables)"""
+    wb=pyxl.load_workbook(flNm)
+    ws=wb[shNm]
+    t=ws.tables[tblNm]
+    ref=t.ref
+    row,col=ws[ref[ref.index(':')+1:]].row,ws[ref[:ref.index(':')]].column
+    records=data
+    for rec in records:
+        for i in range(len(rec)):
+            ws.cell(column=col+i,row=row+records.index(rec)+1).value=rec[i]
+    newT=pyxl.worksheet.table.Table(displayName=t.displayName,ref=t.ref[:-len(str(row))]+str(row+len(records)))
+    style = pyxl.worksheet.table.TableStyleInfo(name="TableStyleLight1",showRowStripes=True)
+    newT.tableStyleInfo = style
+    # del ws.tables[tblNm]
+    # ws.add_table(newT)
+    ws.tables[tblNm]=newT
+    wb.save(filename=otptNm)
+
+
+def translate_Visual_Template(flNm,ftRef=None,tRef=None):
+    """Takes in an assignment list file, and composes the All_Slots table and Assignment_List table by reading the Visual Template"""
+    ftInf,tInf=getEEinfo(ftRef,tRef)
+    eeDict=makeEEdict(ftInf,tInf,tp='nm')
+    # return eeDict
+    wb=pyxl.load_workbook(flNm)
+    ws=wb['Visual_Template']
+    #===========================================
+    #Print out All_Slots table. Simply observe which jobs are present
+    data=[]
+    jbNms={}
+    maxR=5
+    for i in range(5,100): #Based on template job names start at row 5
+        if ws['A'+str(i)].value!=None: #Typically just 25 jobs, should be extra, so skip blanks
+            data.append([1,24,ws['A'+str(i)].value,'','','',1])
+            jbNms[i]=ws['A'+str(i)].value #key job name by row id
+            if i>maxR: maxR=i #Track row of last job assigned
+    addRecs(flNm,'All_Slots','All_Slots',data)
+    #===========================================
+    #Print out Assignment_List
+    data=[]
+    got=[]
+    #First, identify all slots that are part of a merged cell, so we know to skip over those coordinates when we get to them when iterating over every single one
+    for mRng in ws.merged_cells.ranges:
+        rw,cl=next(mRng.cells) #Grab the first cell coordinates within merged range as this is where text is stored
+        if rw>4: #Do not capture title etc.
+            if ws.cell(row=rw,column=cl).value==None:
+                pass #if a blank cell was left merged, skip it. Therefore it will be assigned as normal
+            else:
+                got.extend(mRng.cells) #Gather up merged coords into got tracker
+                if ws.cell(row=rw,column=cl).fill==pyxl.styles.PatternFill(fill_type="solid",start_color='FFCC99FF',end_color='FFCC99FF'):
+                    tp='F'
+                elif ws.cell(row=rw,column=cl).fill==pyxl.styles.PatternFill(fill_type="solid",start_color='FF00B0F0',end_color='FF00B0F0'): 
+                    tp='WWF'
+                elif 'N/A' in ws.cell(row=rw,column=cl).value:
+                    tp='DNS'
+                else: tp='V'
+                #Active=1, assnType,start slot, end slot, eeid, job
+                #slots are -1 because col 1 in excel is job name. Unkn if 2 or 3 cells mrged so use first cell cooridnate already captured, and known that last cell is last entry in got list
+                if tp=='DNS':
+                    data.append([1,tp,cl-1,got[-1][1]-1,"",jbNms[rw]])
+                else:
+                    if ' ' in ws.cell(row=rw,column=cl).value: #Pull name to use as dictionary key as anything before appearance of a space 
+                        nm=ws.cell(row=rw,column=cl).value[:ws.cell(row=rw,column=cl).value.index(' ')].lower() 
+                    else: nm=ws.cell(row=rw,column=cl).value.lower() #No space, use name as appears
+                    try:
+                        data.append([1,tp,cl-1,got[-1][1]-1,eeDict[nm].eeID,jbNms[rw]])
+                    except KeyError:
+                        print('The name '+nm+' identified in the visual template could not be associated with EE data from the refusal sheets. Check the formatting')
+    #Note that, at this time, the output file already exists with previously added rows in first table. therefore refer to this file as the file to write to, in following command.
+    addRecs('AutoPrimed_Template.xlsx','Assignment_List','Assn_List',data)
+    # wb.save('wow.xlsx')
+    # new=deepcopy(wb)
+    # new.save('AutoPrimed_Template.xlsx')
+    return 'AutoPrimed_Template.xlsx'
