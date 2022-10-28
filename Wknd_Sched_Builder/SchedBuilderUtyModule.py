@@ -24,7 +24,7 @@ def debug(func):
 
 def addTBL(tblName,fields="",dTypes=None,data=None,addOn=False):
     """Create table if not already existing, optionally with data, optionally clearing out old data if present. Fields as list of strings. Datatypes as list of strings, one must be provided for each field. See sqlite3 docs for mroe info"""
-    conn = sqlite3.connect('test16.db')
+    conn = sqlite3.connect('test17.db')
     c = conn.cursor()
     listedFields=''
     if fields=="": #If none given, make alphabetical
@@ -63,7 +63,7 @@ def isNumeric(n):
 
 def viewTBL(tblName,fields=None,sortBy=None,filterOn=None,returnStatement=0):
     """return np array of table with optional select fields, filtered, sorted. Sort syntax=[(field1,asc/desc),(field2,asc/desc)...] Filter syntax=[(field1,value),(field2,value)...]"""
-    conn = sqlite3.connect('test16.db')
+    conn = sqlite3.connect('test17.db')
     c = conn.cursor()
     stmnt='SELECT '
     if fields!=None: 

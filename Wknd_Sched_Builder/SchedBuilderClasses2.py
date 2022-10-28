@@ -408,7 +408,7 @@ class Schedule():
                 if self.ee[lowManID].slOK(self,sl,tp='F'): return lowManID,'F'
             self.assnLog.append('NO STAFF! No one to force to '+sl.key())
             return None,'N' #No one to force
-
+    # @debug
     def checkForceStop(self,tup,iter,assn):
         if tup!=None:
             if iter==tup[0] and assn==tup[1]: return True
@@ -485,7 +485,7 @@ class Schedule():
                     WIPschd.assnLog.append('The last assignment created a broken schedule where the person' +WIPschd.ee[eId].lastNm+' had a forcing (previously assigned) after 48h in the week (just assigned.) Adding this slot to priority sequence and reiterating')
                     self.assnLog.extend(WIPschd.assnLog) #add to master before iterating
                     self.assnLog.extend('RETURN A')
-                    return self.fillOutSched_v3(WIPschd.noVol,iter,pre8=pre8,last=WIPschd) #WIPschd,'P-Frce Brk' #<-Alt return for debugging
+                    return self.fillOutSched_v3(WIPschd.noVol,iter,pre8=pre8,last=WIPschd,stop=stop) #WIPschd,'P-Frce Brk' #<-Alt return for debugging
                 newK=set([k for k in WIPschd.slots if len(WIPschd.slots[k].eligVol)==0 and WIPschd.slots[k].assnType not in ['WWF','F','V','nV','DNS','N']]) #After assignment, see if anything now needing forcing that hasn't been seen before
                 if len(newK-set(WIPschd.noVol))>0: #Case that a forced assignment made someone ineligible for a slot they were marked as the last volunteer in, creating a slot requiring forcing that hasn't been seen before, requiring re iteration
                     pullK=newK-set(WIPschd.noVol) #Get the keys for slots that are now without volunteers(could be more than one so use set subtraction)
@@ -493,7 +493,7 @@ class Schedule():
                     WIPschd.noVol.extend(pullK)
                     self.assnLog.extend(WIPschd.assnLog) #Add to master before iterating
                     self.assnLog.extend('RETURN B')
-                    return self.fillOutSched_v3(WIPschd.noVol,iter,pre8=pre8,last=WIPschd) # WIPschd,'P-Bump'  #<-Alt return for debugging
+                    return self.fillOutSched_v3(WIPschd.noVol,iter,pre8=pre8,last=WIPschd,stop=stop) # WIPschd,'P-Bump'  #<-Alt return for debugging
         #=====
         #======
         #Phase 0.5 - Make 8 Hour shift assignments previously identified in Phase 1, to set the scene
@@ -547,14 +547,14 @@ class Schedule():
                                         WIPschd.noVol.extend(pullK)
                                         self.assnLog.extend(WIPschd.assnLog) #Add to master before iterating
                                         self.assnLog.extend('RETURN C')
-                                        return self.fillOutSched_v3(WIPschd.noVol,iter,pre8=pre8,last=WIPschd) # WIPschd,'P-Bump'  #<-Alt return for debugging
+                                        return self.fillOutSched_v3(WIPschd.noVol,iter,pre8=pre8,last=WIPschd,stop=stop) # WIPschd,'P-Bump'  #<-Alt return for debugging
                                 else:                                         
                                     pre8[k1]=eId
                                     pre8[k2]=eId
                                     WIPschd.assnLog.append("Assigning "+str(WIPschd.ee[eId].lastNm)+" a voluntary 8 hour shift to "+str(k1)+", "+str(k2)+" means they can't be forced for a later slot they were forced in for already. Reiterating schedule with this 8 hour assignment on the initial-fill priority list")
                                     self.assnLog.extend(WIPschd.assnLog)
                                     self.assnLog.extend('RETURN D')
-                                    return self.fillOutSched_v3(WIPschd.noVol,iter,pre8=pre8,last=WIPschd)
+                                    return self.fillOutSched_v3(WIPschd.noVol,iter,pre8=pre8,last=WIPschd,stop=stop)
                                 if s==1: 
                                     break #Break out of searching through ee's, it got assigned and so, done
                         if s==1: break #Break out of incrementing through k2 as k1 has been assignd so we need to look at another k1
@@ -593,14 +593,14 @@ class Schedule():
                                         WIPschd.noVol.extend(pullK)
                                         self.assnLog.extend(WIPschd.assnLog) #Add to master before iterating
                                         self.assnLog.extend('RETURN G')
-                                        return self.fillOutSched_v3(WIPschd.noVol,iter,pre8=pre8,last=WIPschd) # WIPschd,'P-Bump'  #<-Alt return for debugging
+                                        return self.fillOutSched_v3(WIPschd.noVol,iter,pre8=pre8,last=WIPschd,stop=stop) # WIPschd,'P-Bump'  #<-Alt return for debugging
                                 else:                                         
                                     pre8[k1]=eId
                                     pre8[k2]=eId
                                     WIPschd.assnLog.append("Assigning "+str(WIPschd.ee[eId].lastNm)+" a voluntary 8 hour shift to "+str(k1)+", "+str(k2)+" means they can't be forced for a later slot they were forced in for already. Reiterating schedule with this 8 hour assignment on the initial-fill priority list")
                                     self.assnLog.extend(WIPschd.assnLog)
                                     self.assnLog.extend('RETURN H')
-                                    return self.fillOutSched_v3(WIPschd.noVol,iter,pre8=pre8,last=WIPschd)
+                                    return self.fillOutSched_v3(WIPschd.noVol,iter,pre8=pre8,last=WIPschd,stop=stop)
                                 if s==1: 
                                     break #Break out of searching through ee's, it got assigned and so, done
                         if s==1: break #Break out of incrementing through k2 as k1 has been assignd so we need to look at another k1
@@ -659,13 +659,13 @@ class Schedule():
                         WIPschd.noVol.extend(pullK)
                         self.assnLog.extend(WIPschd.assnLog) #Add to master before iterating
                         self.assnLog.extend('RETURN I')
-                        return self.fillOutSched_v3(WIPschd.noVol,iter,pre8=pre8,last=WIPschd) # WIPschd,'P-Bump'  #<-Alt return for debugging
+                        return self.fillOutSched_v3(WIPschd.noVol,iter,pre8=pre8,last=WIPschd,stop=stop) # WIPschd,'P-Bump'  #<-Alt return for debugging
                     if r==False and curS.key() not in WIPschd.noVol:
                         WIPschd.noVol.append(curS.key())
                         WIPschd.assnLog.append('The last assignment created a broken schedule where the person ('+WIPschd.ee[eId].lastNm+') had a forcing (previously assigned) after 48h in the week (just assigned.) Adding this slot to priority sequence and reiterating')
                         self.assnLog.extend(WIPschd.assnLog)
                         self.assnLog.extend('RETURN E')
-                        return self.fillOutSched_v3(WIPschd.noVol,iter,pre8=pre8,last=WIPschd) # WIPschd,'V-F Rule'   #<-Alt return for debugging
+                        return self.fillOutSched_v3(WIPschd.noVol,iter,pre8=pre8,last=WIPschd,stop=stop) # WIPschd,'V-F Rule'   #<-Alt return for debugging
                     # if len(postNoVol-preNoVol)>0: #Recurse, an assignment made another slot have noVol
                     #     WIPschd.assnLog.append('The last assignment caused slot(s) '+str(list(postNoVol-preNoVol))+' to have no more eligible volunteers. A new iteration will take place with these slots getting priority assignment')
                     #     WIPschd.noVol.extend(list(postNoVol-preNoVol))
@@ -685,7 +685,7 @@ class Schedule():
                 WIPschd.assnLog.append('The last assignment resulted in slot ('+str([k for k in slLost if k!=lastK])+') having no more eligible volunteers. Those slots are added to the list of slots to force at the start, and a new schedule will be made with updated list of slots to Force')
                 self.assnLog.extend(WIPschd.assnLog)
                 self.assnLog.extend('RETURN F')
-                return self.fillOutSched_v3(WIPschd.noVol,iter,pre8=pre8,last=WIPschd)# WIPschd,'V-Bump' #<-Alt return for debugging 
+                return self.fillOutSched_v3(WIPschd.noVol,iter,pre8=pre8,last=WIPschd,stop=stop)# WIPschd,'V-Bump' #<-Alt return for debugging 
 
                                 
 
@@ -1036,22 +1036,45 @@ class Schedule():
             c+=1
         #=============================================
         #Print assignments to a separate sheet, in alphabetical order by last name
-        ws2 = wb.create_sheet(title="Assignments (Alpha)")
-        ws2.cell(row=2,column=1).value='Last, First'
-        ws2.cell(row=2,column=2).value='Time slots'
+        ws = wb.create_sheet(title="Assignments (Alpha)")
+        ws.cell(row=3,column=1).value='Last, First'
+        ws.cell(row=2,column=2).value='Time slots'
+        styleCell(ws['A3'],'shift')
+        # styleCell(ws['A2'],'shift')
+        ws.column_dimensions['A'].width =22.78
+        dys=['Friday','Saturday','Sunday','Monday']
+        shifts=['C','A','B']*4
+        tSlots=['11p - 3a','3a - 7a','7a - 11a', '11a - 3p','3p-7p', '7p-11p']*4
+        for i in range(0,24,6): #Print Days of week
+            cl=ws.cell(column=2+i,row=1)
+            styleCell(cl,'day',6) #Style all the cells within the merge
+            ws.merge_cells(start_row=1, start_column=2+i, end_row=1, end_column=2+i+5)
+            cl.value=dys.pop(0)
+        for i in range(0,24,2): #Print the shift title
+            cl=ws.cell(column=2+i,row=2)
+            styleCell(cl,'shift',1)
+            ws.merge_cells(start_row=2, start_column=2+i, end_row=2, end_column=2+i+1)
+            cl.value=shifts.pop(0)
+        for i in range(24): #Print the shift times row
+            cl=ws.cell(column=2+i,row=3)
+            cl.value=tSlots.pop(0)
+            styleCell(cl,'hours')
         # ws2.cell(row=1,column=1).value='Note that the seniority value presented is not actual plant seniority number, but just the sequence of '
-        n=1
+        n=3
         for rec in tls.viewTBL('senRef',sortBy=[('last','ASC')]):
             eId=rec[2]
             if len(self.ee[eId].assignments)>0 and self.slots[self.ee[eId].assignments[0]].assnType!='WWF':#If the person has an assignment and isn't WWF, print it
                 n+=1
-                ws2.cell(row=n+1,column=1).value=self.ee[eId].lastNm+', '+self.ee[eId].firstNm[0]+'.'
-                # ws2.cell(row=n+1,column=2).value=eId
+                ws.cell(row=n,column=1).value=self.ee[eId].lastNm+', '+self.ee[eId].firstNm[0]+'.' #Print name in column A
+                #Print N/A to all other cells, actual assignments will overwrite.
+                for i in range(2,26):
+                    styleCell(ws.cell(row=n,column=i),'DNS')
+                    ws.cell(row=n,column=i).value="-"
                 c=0
                 for k in sorted(self.ee[eId].assignments,key=lambda k:int(k[:k.index('_')])):
-                    styleNfill(ws2.cell(row=n+1,column=2+c),self.slots[k])
+                    styleNfill(ws.cell(row=n,column=1+int(k[:k.index('_')])),self.slots[k])
                     # ws2.cell(row=n+1,column=2+c).value=self.slots[k].dispNm+' '+ self.slLeg[self.slots[k].seqID-1][2]+' ('+self.slLeg[self.slots[k].seqID-1][1]+')'
-                    ws2.cell(row=n+1,column=2+c).value=self.slLeg[self.slots[k].seqID-1][2]+' ('+self.slLeg[self.slots[k].seqID-1][1]+')'
+                    ws.cell(row=n,column=1+int(k[:k.index('_')])).value=self.slots[k].dispNm
                     c+=1
         #==========================
         #Print succint assignment log to a separate sheet
@@ -1078,7 +1101,7 @@ class Schedule():
             ws2.cell(column=1,row=2+n).value=rec
             n+=1
 
-        #=============================================
+        #==========================================================
         #Print assignments to a separate sheet, sequenced by seniority
         ws2 = wb.create_sheet(title="Assignments (Sen'ty)")
         ws2.cell(row=2,column=1).value='Seniority'
@@ -1097,7 +1120,7 @@ class Schedule():
                     styleNfill(ws2.cell(row=n+1,column=3+c),self.slots[k])
                     ws2.cell(row=n+1,column=3+c).value=self.slots[k].dispNm+' '+ self.slLeg[self.slots[k].seqID-1][2]+' ('+self.slLeg[self.slots[k].seqID-1][1]+')'
                     c+=1
-
+        #====================================================
                
 
 
