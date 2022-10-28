@@ -14,7 +14,8 @@ def PrimeVisualTemplate(vTmplFl,FTrefFl,TempRefFl):
     primedTemplateName=tls.translate_Visual_Template(vTmplFl,FTrefFl,TempRefFl)
     return primedTemplateName,primedTemplateName,datetime.now(),datetime.now(),FTrefFl.name,TempRefFl.name #Return twice so as to send file to two interface entities (file holders), plus time stampers, return the refusal sheets to send to B
 
-def GenerateSchedule(schedWWF,xtraDays,wkHrs,DaysCrew,AssnFl,FTrefFl,TempRefFl,PollFl,stop=None,template=False):
+def GenerateSchedule(schedWWF,xtraDays,wkHrs,DaysCrew,AssnFl,FTrefFl,TempRefFl,PollFl,stop1=0,stop2=0,template=False):
+    stop=(stop1,stop2)
     assnWWF=schedWWF
     if assnWWF=='Yes': assnWWF=True
     if assnWWF=='No': assnWWF=True
@@ -26,7 +27,25 @@ def GenerateSchedule(schedWWF,xtraDays,wkHrs,DaysCrew,AssnFl,FTrefFl,TempRefFl,P
     mySched.proofEligVol()
     mySched.proofEligVol()#i don't know man i found in testing sometimes it wasnt completing properly the first time around
     if template==True: #Case of template viewer
-        flNm=sch.printToExcel()
+        flNm=mySched.printToExcel()
+        return flNm,datetime.now()
+    sch=mySched.fillOutSched_v3(stop=stop) #Stop is not None when submitted from tab C
+    flNm=sch.printToExcel()
+    return flNm,datetime.now()
+
+def GenerateSchedule1(schedWWF,xtraDays,wkHrs,DaysCrew,AssnFl,FTrefFl,TempRefFl,PollFl,stop=None,template=True):
+    assnWWF=schedWWF
+    if assnWWF=='Yes': assnWWF=True
+    if assnWWF=='No': assnWWF=True
+    xtraDays=xtraDays
+    Acrew=DaysCrew
+    wkHrs=wkHrs
+    mySched=tls.preProcessData(Acrew,wkHrs,FTrefFl,TempRefFl,AssnFl,PollFl,assnWWF=assnWWF,xtraDays=xtraDays)
+    mySched.evalAssnList()
+    mySched.proofEligVol()
+    mySched.proofEligVol()#i don't know man i found in testing sometimes it wasnt completing properly the first time around
+    if template==True: #Case of template viewer
+        flNm=mySched.printToExcel()
         return flNm,datetime.now()
     sch=mySched.fillOutSched_v3(stop=stop) #Stop is not None when submitted from tab C
     flNm=sch.printToExcel()
@@ -76,18 +95,21 @@ with gr.Blocks() as demo:
             C_fl_T=gr.File(label="Generated Template")
             C_tx_Ttimestamp=gr.Textbox(label="File Change Timestamp - Generated Template",placeholder="Waiting for first run.")  
         with gr.Tab("Force Stop Mid-Scheduling"):
-            gr.Markdown("On this tab you can observe what a schedule looked like after making a specific number of assignments. Iteration number can be retrieved from the bottom of the verbose assignment list tab of a generated schedule.")
+            gr.Markdown("On this tab you can observe what a schedule looked like after making a specific number of assignments. Iteration number can be retrieved from the bottom of the verbose assignment list tab of a generated schedule. If the specified iteration and assignment number combination are not encountered, this function will simply re generate the entire schedule. This function only quits schedule building after the template. An assignment number within the template building portion will not be quit on, and it will proceed to build full schedule.")
             with gr.Row():
                 with gr.Column():
-                    C_tx_FS = gr.Textbox(label="Time Of Full Schedule Generation",placeholder="N/A")
-                    C_nm_PS = gr.Number(label="Limit Number for Total Assignments")
+                    with gr.Row():
+                        C_nm_PS = gr.Number(label="Limit Number for Total Assignments")
+                        C_nm_IN = gr.Number(label="Iteration Number To Stop On")
                 with gr.Column():
                     C_fl_PS=gr.File(label="Partially Complete Schedule")
+                    C_tx_ts2 = gr.Textbox(label="Time Of Partial Schedule Generation",placeholder="N/A")
             C_bt_PS = gr.Button("Partially Generate Schedule")
         
     #######################
     #Third Define the Interactions
     A_bt_PT.click(PrimeVisualTemplate,[A_fl_VT,A_fl_FTref,A_fl_Tref],[A_fl_PT,B_fl_PT,A_tx_PTtimestamp,B_tx_PTtimestamp,B_fl_FTref,B_fl_Tref])
     B_bt_MS.click(GenerateSchedule,[B_wwfOT,B_xtraDay,B_wkHrs,B_dayCrew,B_fl_PT,B_fl_FTref,B_fl_Tref,B_fl_Pl],[B_fl_FS,B_tx_FTtimestamp])
-    C_bt_MT.click(GenerateSchedule,[B_wwfOT,B_xtraDay,B_wkHrs,B_dayCrew,B_fl_PT,B_fl_FTref,B_fl_Tref,B_fl_Pl],[C_fl_T,C_tx_Ttimestamp])
+    C_bt_MT.click(GenerateSchedule1,[B_wwfOT,B_xtraDay,B_wkHrs,B_dayCrew,B_fl_PT,B_fl_FTref,B_fl_Tref,B_fl_Pl],[C_fl_T,C_tx_Ttimestamp])
+    C_bt_PS.click(GenerateSchedule,[B_wwfOT,B_xtraDay,B_wkHrs,B_dayCrew,B_fl_PT,B_fl_FTref,B_fl_Tref,B_fl_Pl,C_nm_IN,C_nm_PS],[C_fl_PS,C_tx_ts2])
     demo.launch()
